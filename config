@@ -1,0 +1,12 @@
+[core]
+	bare = true
+	repositoryformatversion = 0
+	filemode = false
+	symlinks = false
+	ignorecase = true
+[remote "origin"]
+	url = git@github.com:osiristhomas/synth.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+	tagopt = --no-tags
+	puttykeyfile = C:\\Users\\osiri\\Desktop\\privkey.ppk
+	pushurl = git@github.com:osiristhomas/synth.git
