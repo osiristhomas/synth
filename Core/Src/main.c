@@ -86,6 +86,7 @@ int main(void)
 	unsigned char midi[3];
 	uint8_t num_pts = 128;
 	uint32_t sine_table[num_pts];
+	uint8_t i = 0;
 
 	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
 	HAL_Init();
@@ -105,13 +106,22 @@ int main(void)
 
 	// Generate lookup table
 	gen_table(sine_table, num_pts);
+	HAL_TIM_Base_Start(&htim2);
 
 	// Start DMA with the DAC and wave table
 	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, num_pts, DAC_ALIGN_12B_R);
-	HAL_TIM_Base_Start(&htim2);
+	HAL_Delay(2000);
+	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, 0, 1, DAC_ALIGN_12B_R);
+
 
 	while (1) {
-		// Receive midi note
+
+		//DAC1->DHR12R1 = sine_table[i++];
+		//if (i == 128) i = 0;
+
+
+
+		/*// Receive midi note
 		HAL_UART_Receive_IT(&huart1, midi, 3);
 
 		// 0x90 is NOTE ON on CHANNEL 0
@@ -120,12 +130,18 @@ int main(void)
 			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
 			// Adjust sine wave frequency using auto reload register
 			TIM2->ARR = (F_CPU / (NOTE * 128)) - 1;
-			HAL_Delay(1);
+			while (midi[0] == 0x90) {
+						HAL_UART_Receive_IT(&huart1, midi, 3);
+						i = 0;
+						DAC1->DHR12R1 = sine_table[i++];
+
+			}
 			// 0x80 is NOTE OFF on CHANNEL 0
 		} else if (midi[0] == 0x80) {
 			// Turn off LED connected to PA6
 			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET);
-		}
+		}*/
+
 	}
 }
 void gen_table(uint32_t *t, uint8_t pts)
@@ -134,7 +150,7 @@ void gen_table(uint32_t *t, uint8_t pts)
 	int n = 0;
 	float inc = 2 * M_PI / pts;
 	for (i = 0; i < 2 * M_PI; i = i + inc) {
-		t[n++] = 4095 * ((sin(i) + 1) / 2);
+		t[n++] = 4096 * ((sin(i) + 1) / 2);
 	}
 }
 
@@ -221,7 +237,7 @@ static void MX_DAC1_Init(void)
   sConfig.DAC_DMADoubleDataMode = DISABLE;
   sConfig.DAC_SignedFormat = DISABLE;
   sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
   sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
   sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
   sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
