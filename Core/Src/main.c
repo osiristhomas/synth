@@ -67,6 +67,14 @@ static void MX_TIM2_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_USART1_UART_Init(void);
+
+enum {
+ATTACK = 0,
+DECAY,
+SUSTAIN,
+RELEASE
+};
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -87,6 +95,7 @@ int main(void)
 	uint8_t num_pts = 128;
 	uint32_t sine_table[num_pts];
 	uint8_t i = 0;
+	//uint8_t state;
 
 	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
 	HAL_Init();
@@ -110,8 +119,8 @@ int main(void)
 
 	// Start DMA with the DAC and wave table
 	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, num_pts, DAC_ALIGN_12B_R);
-	HAL_Delay(2000);
-	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, 0, 1, DAC_ALIGN_12B_R);
+	//HAL_Delay(2000);
+	//HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, 0, 1, DAC_ALIGN_12B_R);
 
 
 	while (1) {
@@ -121,7 +130,7 @@ int main(void)
 
 
 
-		/*// Receive midi note
+		// Receive midi note
 		HAL_UART_Receive_IT(&huart1, midi, 3);
 
 		// 0x90 is NOTE ON on CHANNEL 0
@@ -131,16 +140,19 @@ int main(void)
 			// Adjust sine wave frequency using auto reload register
 			TIM2->ARR = (F_CPU / (NOTE * 128)) - 1;
 			while (midi[0] == 0x90) {
-						HAL_UART_Receive_IT(&huart1, midi, 3);
-						i = 0;
 						DAC1->DHR12R1 = sine_table[i++];
-
+						if (i == num_pts) i = 0;
+						HAL_UART_Receive(&huart1, midi, 3, 5);
 			}
 			// 0x80 is NOTE OFF on CHANNEL 0
 		} else if (midi[0] == 0x80) {
 			// Turn off LED connected to PA6
 			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET);
-		}*/
+			while (midi[0] == 0x80) {
+				DAC1->DHR12R1 = 0;
+				HAL_UART_Receive(&huart1, midi, 3, 5);
+	}
+		}
 
 	}
 }
