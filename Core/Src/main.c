@@ -1,29 +1,16 @@
-/* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2021 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
-  ******************************************************************************
-  */
-/* USER CODE END Header */
-/* Includes ------------------------------------------------------------------*/
+/* Osiris Thomas
+ * STM32 Synthesizer
+ * Last edited: 5/12/21
+ */
+
 #include "main.h"
 #include <math.h>
 #include "notes.h"
 
 #define F_CPU 170000000UL
-#define NOTE pitches[midi[1] + 13]
+#define NOTE pitches[midi[1] + 1]
+#define MIDI_IN_LED_ON HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET)
+#define MIDI_IN_LED_OFF HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET)
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -75,6 +62,8 @@ SUSTAIN,
 RELEASE
 };
 
+// Global midi note variable
+unsigned char midi[3];
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -89,9 +78,10 @@ RELEASE
   * @retval int
   */
 void gen_table(uint32_t *, uint8_t);
+void midi_read(void);
 int main(void)
 {
-	unsigned char midi[3];
+
 	uint8_t num_pts = 128;
 	uint32_t sine_table[num_pts];
 	uint8_t i = 0;
@@ -118,42 +108,35 @@ int main(void)
 	HAL_TIM_Base_Start(&htim2);
 
 	// Start DMA with the DAC and wave table
-	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, num_pts, DAC_ALIGN_12B_R);
+	//HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, num_pts, DAC_ALIGN_12B_R);
 	//HAL_Delay(2000);
-	//HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, 0, 1, DAC_ALIGN_12B_R);
+	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, 0, 1, DAC_ALIGN_12B_R);
 
+	// Receive midi note
+	midi_read();
 
 	while (1) {
-
-		//DAC1->DHR12R1 = sine_table[i++];
-		//if (i == 128) i = 0;
-
-
-
-		// Receive midi note
-		HAL_UART_Receive_IT(&huart1, midi, 3);
 
 		// 0x90 is NOTE ON on CHANNEL 0
 		if (midi[0] == 0x90) {
 			// Turn on LED connected to PA6
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
+			MIDI_IN_LED_ON;
 			// Adjust sine wave frequency using auto reload register
 			TIM2->ARR = (F_CPU / (NOTE * 128)) - 1;
 			while (midi[0] == 0x90) {
-						DAC1->DHR12R1 = sine_table[i++];
-						if (i == num_pts) i = 0;
-						HAL_UART_Receive(&huart1, midi, 3, 5);
+				DAC1->DHR12R1 = sine_table[i++];
+				if (i == num_pts) i = 0;
+				midi_read();
 			}
 			// 0x80 is NOTE OFF on CHANNEL 0
-		} else if (midi[0] == 0x80) {
+		} else {
 			// Turn off LED connected to PA6
-			HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET);
+			MIDI_IN_LED_OFF;
 			while (midi[0] == 0x80) {
 				DAC1->DHR12R1 = 0;
-				HAL_UART_Receive(&huart1, midi, 3, 5);
-	}
+				midi_read();
+			}
 		}
-
 	}
 }
 void gen_table(uint32_t *t, uint8_t pts)
@@ -164,6 +147,10 @@ void gen_table(uint32_t *t, uint8_t pts)
 	for (i = 0; i < 2 * M_PI; i = i + inc) {
 		t[n++] = 4096 * ((sin(i) + 1) / 2);
 	}
+}
+
+void midi_read(void) {
+	HAL_UART_Receive_IT(&huart1, midi, 3);
 }
 
 /**
@@ -286,8 +273,8 @@ static void MX_TIM2_Init(void)
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 1000;
-  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV4;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
   {
     Error_Handler();
