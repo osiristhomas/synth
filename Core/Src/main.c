@@ -11,6 +11,7 @@
 #define NOTE pitches[midi[1] + 1]
 #define MIDI_IN_LED_ON HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET)
 #define MIDI_IN_LED_OFF HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET)
+#define DAC_DATA DAC1->DHR12R1
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -108,11 +109,11 @@ int main(void)
 	HAL_TIM_Base_Start(&htim2);
 
 	// Start DMA with the DAC and wave table
-	//HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, num_pts, DAC_ALIGN_12B_R);
+	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, num_pts, DAC_ALIGN_12B_R);
 	//HAL_Delay(2000);
-	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, 0, 1, DAC_ALIGN_12B_R);
+	//HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, 0, 1, DAC_ALIGN_12B_R);
 
-	// Receive midi note
+	// Receive initial midi note
 	midi_read();
 
 	while (1) {
@@ -124,7 +125,7 @@ int main(void)
 			// Adjust sine wave frequency using auto reload register
 			TIM2->ARR = (F_CPU / (NOTE * 128)) - 1;
 			while (midi[0] == 0x90) {
-				DAC1->DHR12R1 = sine_table[i++];
+				DAC_DATA = sine_table[i++];
 				if (i == num_pts) i = 0;
 				midi_read();
 			}
@@ -133,7 +134,7 @@ int main(void)
 			// Turn off LED connected to PA6
 			MIDI_IN_LED_OFF;
 			while (midi[0] == 0x80) {
-				DAC1->DHR12R1 = 0;
+				DAC_DATA = 0;
 				midi_read();
 			}
 		}
