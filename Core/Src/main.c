@@ -1,6 +1,6 @@
 /* Osiris Thomas
  * STM32 Synthesizer
- * Last edited: 5/12/21
+ * Last edited: 5/13/21
  */
 
 #include "main.h"
@@ -8,7 +8,7 @@
 #include "notes.h"
 
 #define F_CPU 170000000UL
-#define NOTE pitches[midi[1] + 1]
+#define NOTE pitches[midi[1]]
 #define MIDI_IN_LED_ON HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET)
 #define MIDI_IN_LED_OFF HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET)
 #define DAC_DATA DAC1->DHR12R1
@@ -34,11 +34,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 DAC_HandleTypeDef hdac1;
-DMA_HandleTypeDef hdma_dac1_ch1;
 
-TIM_HandleTypeDef htim2;
-TIM_HandleTypeDef htim3;
-TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim1;
 
 UART_HandleTypeDef huart1;
 
@@ -49,13 +46,17 @@ UART_HandleTypeDef huart1;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_DMA_Init(void);
 static void MX_DAC1_Init(void);
-static void MX_TIM2_Init(void);
-static void MX_TIM3_Init(void);
-static void MX_TIM4_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM1_Init(void);
+/* USER CODE BEGIN PFP */
 
+/* USER CODE END PFP */
+
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+/* USER CODE END 0 */
 enum {
 ATTACK = 0,
 DECAY,
@@ -65,81 +66,88 @@ RELEASE
 
 // Global midi note variable
 unsigned char midi[3];
-/* USER CODE BEGIN PFP */
-
-/* USER CODE END PFP */
-
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-
-/* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
   * @retval int
   */
+
 void gen_table(uint32_t *, uint8_t);
 void midi_read(void);
+void delay_us (uint32_t);
+
 int main(void)
 {
-
 	uint8_t num_pts = 128;
 	uint32_t sine_table[num_pts];
-	uint8_t i = 0;
+	//uint8_t i = 0;
 	//uint8_t state;
+  /* USER CODE BEGIN 1 */
 
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  /* USER CODE END 1 */
 
-	/* Configure the system clock */
-	SystemClock_Config();
+  /* MCU Configuration--------------------------------------------------------*/
 
-	/* Initialize all configured peripherals */
-	MX_GPIO_Init();
-	MX_DMA_Init();
-	MX_DAC1_Init();
-	MX_TIM2_Init();
-	MX_TIM3_Init();
-	MX_TIM4_Init();
-	MX_USART1_UART_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
+  /* USER CODE BEGIN Init */
 
-	// Generate lookup table
-	gen_table(sine_table, num_pts);
-	HAL_TIM_Base_Start(&htim2);
+  /* USER CODE END Init */
 
-	// Start DMA with the DAC and wave table
-	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, num_pts, DAC_ALIGN_12B_R);
-	//HAL_Delay(2000);
-	//HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, 0, 1, DAC_ALIGN_12B_R);
+  /* Configure the system clock */
+  SystemClock_Config();
 
-	// Receive initial midi note
-	midi_read();
+  /* USER CODE BEGIN SysInit */
 
-	while (1) {
+  /* USER CODE END SysInit */
 
-		// 0x90 is NOTE ON on CHANNEL 0
-		if (midi[0] == 0x90) {
-			// Turn on LED connected to PA6
-			MIDI_IN_LED_ON;
-			// Adjust sine wave frequency using auto reload register
-			TIM2->ARR = (F_CPU / (NOTE * 128)) - 1;
-			while (midi[0] == 0x90) {
-				DAC_DATA = sine_table[i++];
-				if (i == num_pts) i = 0;
-				midi_read();
-			}
-			// 0x80 is NOTE OFF on CHANNEL 0
-		} else {
-			// Turn off LED connected to PA6
-			MIDI_IN_LED_OFF;
-			while (midi[0] == 0x80) {
-				DAC_DATA = 0;
-				midi_read();
-			}
-		}
-	}
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_DAC1_Init();
+  MX_USART1_UART_Init();
+  MX_TIM1_Init();
+  // Generate lookup table
+  gen_table(sine_table, num_pts);
+  HAL_TIM_Base_Start(&htim1);
+
+  	// Start DMA with the DAC and wave table
+  	//HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, num_pts, DAC_ALIGN_12B_R);
+  	//HAL_Delay(2000);
+  	//HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, 0, 1, DAC_ALIGN_12B_R);
+
+  	// Receive initial midi note
+  	midi_read();
+
+  	while (1) {
+
+  		/*// 0x90 is NOTE ON on CHANNEL 0
+  		if (midi[0] == 0x90) {
+  			// Turn on LED connected to PA6
+  			MIDI_IN_LED_ON;
+  			while (midi[0] == 0x90) {
+  				DAC_DATA = sine_table[i++];
+  				delay_us(1000000/NOTE);
+  				if (i == num_pts) i = 0;
+  				midi_read();
+  			}
+  			// 0x80 is NOTE OFF on CHANNEL 0
+  		} else {
+  			// Turn off LED connected to PA6
+  			MIDI_IN_LED_OFF;
+  			while (midi[0] == 0x80) {
+  				DAC_DATA = 0;
+  				midi_read();
+  			}
+  		}*/
+
+  		MIDI_IN_LED_ON;
+  		delay_us(1000000);
+  		MIDI_IN_LED_OFF;
+  		delay_us(1000000);
+  	}
 }
+
 void gen_table(uint32_t *t, uint8_t pts)
 {
 	float i;
@@ -152,6 +160,13 @@ void gen_table(uint32_t *t, uint8_t pts)
 
 void midi_read(void) {
 	HAL_UART_Receive_IT(&huart1, midi, 3);
+}
+
+void delay_us (uint32_t us)
+{
+	// Set counter to 0
+	__HAL_TIM_SET_COUNTER(&htim1,0);
+	while (__HAL_TIM_GET_COUNTER(&htim1) < us);
 }
 
 /**
@@ -237,7 +252,7 @@ static void MX_DAC1_Init(void)
   sConfig.DAC_DMADoubleDataMode = DISABLE;
   sConfig.DAC_SignedFormat = DISABLE;
   sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
+  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
   sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
   sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
   sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
@@ -253,137 +268,49 @@ static void MX_DAC1_Init(void)
 }
 
 /**
-  * @brief TIM2 Initialization Function
+  * @brief TIM1 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_TIM2_Init(void)
+static void MX_TIM1_Init(void)
 {
 
-  /* USER CODE BEGIN TIM2_Init 0 */
+  /* USER CODE BEGIN TIM1_Init 0 */
 
-  /* USER CODE END TIM2_Init 0 */
+  /* USER CODE END TIM1_Init 0 */
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
 
-  /* USER CODE BEGIN TIM2_Init 1 */
+  /* USER CODE BEGIN TIM1_Init 1 */
 
-  /* USER CODE END TIM2_Init 1 */
-  htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 1000;
-  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 169;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 65535;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
   {
     Error_Handler();
   }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN TIM2_Init 2 */
+  /* USER CODE BEGIN TIM1_Init 2 */
 
-  /* USER CODE END TIM2_Init 2 */
-
-}
-
-/**
-  * @brief TIM3 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM3_Init(void)
-{
-
-  /* USER CODE BEGIN TIM3_Init 0 */
-
-  /* USER CODE END TIM3_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM3_Init 1 */
-
-  /* USER CODE END TIM3_Init 1 */
-  htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
-  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 1000;
-  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV4;
-  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM3_Init 2 */
-
-  /* USER CODE END TIM3_Init 2 */
-
-}
-
-/**
-  * @brief TIM4 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM4_Init(void)
-{
-
-  /* USER CODE BEGIN TIM4_Init 0 */
-
-  /* USER CODE END TIM4_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM4_Init 1 */
-
-  /* USER CODE END TIM4_Init 1 */
-  htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 0;
-  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 1000;
-  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM4_Init 2 */
-
-  /* USER CODE END TIM4_Init 2 */
+  /* USER CODE END TIM1_Init 2 */
 
 }
 
@@ -432,23 +359,6 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
-
-}
-
-/**
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void)
-{
-
-  /* DMA controller clock enable */
-  __HAL_RCC_DMAMUX1_CLK_ENABLE();
-  __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
 
 }
 
