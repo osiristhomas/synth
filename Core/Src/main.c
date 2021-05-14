@@ -8,29 +8,10 @@
 #include "notes.h"
 
 #define F_CPU 170000000UL
-#define NOTE pitches[midi[1]]
+#define NOTE pitches[midi[1] + 5]
 #define MIDI_IN_LED_ON HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET)
 #define MIDI_IN_LED_OFF HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET)
 #define DAC_DATA DAC1->DHR12R1
-
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
-
-/* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 DAC_HandleTypeDef hdac1;
@@ -39,9 +20,6 @@ TIM_HandleTypeDef htim1;
 
 UART_HandleTypeDef huart1;
 
-/* USER CODE BEGIN PV */
-
-/* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -49,14 +27,9 @@ static void MX_GPIO_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM1_Init(void);
-/* USER CODE BEGIN PFP */
 
-/* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-
-/* USER CODE END 0 */
 enum {
 ATTACK = 0,
 DECAY,
@@ -67,10 +40,7 @@ RELEASE
 // Global midi note variable
 unsigned char midi[3];
 
-/**
-  * @brief  The application entry point.
-  * @retval int
-  */
+
 
 void gen_table(uint32_t *, uint8_t);
 void midi_read(void);
@@ -80,27 +50,16 @@ int main(void)
 {
 	uint8_t num_pts = 128;
 	uint32_t sine_table[num_pts];
-	//uint8_t i = 0;
+	uint8_t i = 0;
 	//uint8_t state;
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
   /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
@@ -110,26 +69,23 @@ int main(void)
   // Generate lookup table
   gen_table(sine_table, num_pts);
   HAL_TIM_Base_Start(&htim1);
+  HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
 
-  	// Start DMA with the DAC and wave table
-  	//HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, num_pts, DAC_ALIGN_12B_R);
-  	//HAL_Delay(2000);
-  	//HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, 0, 1, DAC_ALIGN_12B_R);
 
   	// Receive initial midi note
   	midi_read();
 
   	while (1) {
 
-  		/*// 0x90 is NOTE ON on CHANNEL 0
+  		// 0x90 is NOTE ON on CHANNEL 0
   		if (midi[0] == 0x90) {
   			// Turn on LED connected to PA6
   			MIDI_IN_LED_ON;
   			while (midi[0] == 0x90) {
   				DAC_DATA = sine_table[i++];
-  				delay_us(1000000/NOTE);
   				if (i == num_pts) i = 0;
-  				midi_read();
+  				delay_us(10000/NOTE);
+  				HAL_UART_Receive_IT(&huart1, midi, 3);
   			}
   			// 0x80 is NOTE OFF on CHANNEL 0
   		} else {
@@ -139,12 +95,7 @@ int main(void)
   				DAC_DATA = 0;
   				midi_read();
   			}
-  		}*/
-
-  		MIDI_IN_LED_ON;
-  		delay_us(1000000);
-  		MIDI_IN_LED_OFF;
-  		delay_us(1000000);
+  		}
   	}
 }
 
@@ -165,7 +116,7 @@ void midi_read(void) {
 void delay_us (uint32_t us)
 {
 	// Set counter to 0
-	__HAL_TIM_SET_COUNTER(&htim1,0);
+	__HAL_TIM_SET_COUNTER(&htim1, 0);
 	while (__HAL_TIM_GET_COUNTER(&htim1) < us);
 }
 
