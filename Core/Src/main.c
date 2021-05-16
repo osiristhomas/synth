@@ -38,7 +38,13 @@ RELEASE
 };
 
 // Global midi note variable
-unsigned char midi[3];
+volatile unsigned char midi[3];
+
+// Global ADSR pot ADC values
+volatile uint16_t att_adc;
+volatile uint16_t dec_adc;
+volatile uint16_t sus_adc;
+volatile uint16_t rel_adc;
 
 
 
@@ -50,8 +56,10 @@ int main(void)
 {
 	uint8_t num_pts = 128;
 	uint32_t sine_table[num_pts];
-	uint8_t i = 0;
-	//uint8_t state;
+	uint8_t index = 0;
+	uint8_t adsr_counter = 0;
+	uint8_t midi_state;
+	//uint8_t key_pressed;
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -72,15 +80,53 @@ int main(void)
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
 
 
-  	// Receive initial midi note
-  	midi_read();
+  att_adc = 1024;
+  dec_adc = 1024;
+  sus_adc = 1024;
+  rel_adc = 1024;
 
   	while (1) {
 
-  		// 0x90 is NOTE ON on CHANNEL 0
+  		midi_read();
+
   		if (midi[0] == 0x90) {
   			// Turn on LED connected to PA6
   			MIDI_IN_LED_ON;
+  			midi_state = ATTACK;
+
+  			switch(midi_state) {
+  			case ATTACK:
+  				adsr_counter = 0;
+  				while (adsr_counter < att_adc) {
+  					DAC_DATA = sine_table[index++] * (adsr_counter++/1024.);
+  					delay_us(10000/NOTE);
+  					if (index == 128) index = 0;
+  				}
+  				midi_state = DECAY;
+  			case DECAY:
+  				while (adsr_counter > dec_adc) {
+  					DAC_DATA = sine_table[index++] * (adsr_counter--/1024.);
+  					delay_us(10000/NOTE);
+  					if (index == 128) index = 0;
+  				}
+  				midi_state = SUSTAIN;
+  			case SUSTAIN:
+  				while (midi[0] == 0x90) {
+  					DAC_DATA = sine_table[index++] * (adsr_counter/1024.);
+  					delay_us(10000/NOTE);
+  					if (index == 128) index = 0;
+  					midi_read();
+  				}
+  				midi_state = RELEASE;
+  			case RELEASE:
+  				DAC_DATA = 0;
+  				MIDI_IN_LED_OFF;
+  			}
+
+
+  		}
+  		/*// 0x90 is NOTE ON on CHANNEL 0
+  		if (midi[0] == 0x90) {
   			while (midi[0] == 0x90) {
   				DAC_DATA = sine_table[i++];
   				if (i == num_pts) i = 0;
@@ -95,7 +141,7 @@ int main(void)
   				DAC_DATA = 0;
   				midi_read();
   			}
-  		}
+  		}*/
   	}
 }
 
