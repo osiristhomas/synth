@@ -1,6 +1,6 @@
 /* Osiris Thomas
  * STM32 Synthesizer
- * Last edited: 5/13/21
+ * Last edited: 5/19/21
  */
 
 #include "main.h"
@@ -38,13 +38,15 @@ RELEASE
 };
 
 // Global midi note variable
-volatile unsigned char midi[3];
+unsigned char midi[3];
+// ADSR multiplier
+uint16_t adsr_mult;
 
 // Global ADSR pot ADC values
-volatile uint16_t att_adc;
-volatile uint16_t dec_adc;
-volatile uint16_t sus_adc;
-volatile uint16_t rel_adc;
+uint16_t att_adc;
+uint16_t dec_adc;
+uint16_t sus_adc;
+uint16_t rel_adc;
 
 
 
@@ -57,7 +59,7 @@ int main(void)
 	uint8_t num_pts = 128;
 	uint32_t sine_table[num_pts];
 	uint8_t index = 0;
-	uint8_t adsr_counter = 0;
+	float adsr_counter = 1;
 	uint8_t midi_state;
 	//uint8_t key_pressed;
 
@@ -74,22 +76,27 @@ int main(void)
   MX_DAC1_Init();
   MX_USART1_UART_Init();
   MX_TIM1_Init();
+
   // Generate lookup table
   gen_table(sine_table, num_pts);
+  // Enable timer 1
   HAL_TIM_Base_Start(&htim1);
+  // Enable DAC
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
 
-
+  // Debug adsr values
   att_adc = 1024;
-  dec_adc = 1024;
+  dec_adc = 500;
   sus_adc = 1024;
   rel_adc = 1024;
 
+  midi_read();
+
   	while (1) {
 
-  		midi_read();
 
-  		if (midi[0] == 0x90) {
+
+  		/*if (midi[0] == 0x90) {
   			// Turn on LED connected to PA6
   			MIDI_IN_LED_ON;
   			midi_state = ATTACK;
@@ -97,24 +104,24 @@ int main(void)
   			switch(midi_state) {
   			case ATTACK:
   				adsr_counter = 0;
-  				while (adsr_counter < att_adc) {
+  				while (adsr_counter <= att_adc) {
   					DAC_DATA = sine_table[index++] * (adsr_counter++/1024.);
   					delay_us(10000/NOTE);
-  					if (index == 128) index = 0;
+  					if (index == num_pts) index = 0;
   				}
   				midi_state = DECAY;
   			case DECAY:
-  				while (adsr_counter > dec_adc) {
+  				while (adsr_counter >= dec_adc) {
   					DAC_DATA = sine_table[index++] * (adsr_counter--/1024.);
   					delay_us(10000/NOTE);
-  					if (index == 128) index = 0;
+  					if (index == num_pts) index = 0;
   				}
   				midi_state = SUSTAIN;
   			case SUSTAIN:
   				while (midi[0] == 0x90) {
   					DAC_DATA = sine_table[index++] * (adsr_counter/1024.);
   					delay_us(10000/NOTE);
-  					if (index == 128) index = 0;
+  					if (index == num_pts) index = 0;
   					midi_read();
   				}
   				midi_state = RELEASE;
@@ -122,26 +129,29 @@ int main(void)
   				DAC_DATA = 0;
   				MIDI_IN_LED_OFF;
   			}
+  		}*/
 
 
-  		}
-  		/*// 0x90 is NOTE ON on CHANNEL 0
+  		// 0x90 is NOTE ON on CHANNEL 0
   		if (midi[0] == 0x90) {
+  			MIDI_IN_LED_ON;
   			while (midi[0] == 0x90) {
-  				DAC_DATA = sine_table[i++];
-  				if (i == num_pts) i = 0;
+  				DAC_DATA = sine_table[index++]/adsr_counter;
+  				adsr_counter += 0.001;
+  				if (index == num_pts) index = 0;
   				delay_us(10000/NOTE);
-  				HAL_UART_Receive_IT(&huart1, midi, 3);
+  				midi_read();
   			}
   			// 0x80 is NOTE OFF on CHANNEL 0
   		} else {
   			// Turn off LED connected to PA6
   			MIDI_IN_LED_OFF;
+  			adsr_counter = 1;
   			while (midi[0] == 0x80) {
   				DAC_DATA = 0;
   				midi_read();
   			}
-  		}*/
+  		}
   	}
 }
 
