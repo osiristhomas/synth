@@ -12,21 +12,31 @@
 #define MIDI_IN_LED_ON HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET)
 #define MIDI_IN_LED_OFF HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET)
 #define DAC_DATA DAC1->DHR12R1
+#define NUM_PTS 128
+#define ON 1
+#define OFF 0
 
 /* Private variables ---------------------------------------------------------*/
 DAC_HandleTypeDef hdac1;
-
+DAC_HandleTypeDef hdac2;
+DMA_HandleTypeDef hdma_dac1_ch1;
+DMA_HandleTypeDef hdma_dac2_ch1;
 TIM_HandleTypeDef htim1;
-
+TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim4;
 UART_HandleTypeDef huart1;
 
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_DAC1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM1_Init(void);
+static void MX_DMA_Init(void);
+static void MX_DAC1_Init(void);
+static void MX_DAC2_Init(void);
+static void MX_TIM3_Init(void);
+static void MX_TIM4_Init(void);
 
 
 /* Private user code ---------------------------------------------------------*/
@@ -38,29 +48,42 @@ RELEASE
 };
 
 // Global midi note variable
-unsigned char midi[3];
+unsigned char midi_msg[3];
 // ADSR multiplier
-uint16_t adsr_mult;
+//uint16_t adsr_mult;
 
 // Global ADSR pot ADC values
-uint16_t att_adc;
-uint16_t dec_adc;
-uint16_t sus_adc;
-uint16_t rel_adc;
+//uint16_t att_adc;
+//uint16_t dec_adc;
+//uint16_t sus_adc;
+//uint16_t rel_adc;
+
+struct note_info {
+	uint8_t status;
+	uint8_t state;
+	uint16_t mult;
+	uint16_t attack;
+	uint16_t decay;
+	uint16_t sustain;
+	uint16_t release;
+
+};
 
 
-
+// Generate sine lookup table with predefined amount of points
 void gen_table(uint32_t *, uint8_t);
+// Zero out an array
+void zero_array(uint32_t *, uint8_t);
+// Recieve a 3-byte MIDI message
 void midi_read(void);
+// Delay amount of microseconds passed into function
 void delay_us (uint32_t);
 
 int main(void)
 {
-	uint8_t num_pts = 128;
-	uint32_t sine_table[num_pts];
+	uint32_t sine_table[NUM_PTS];
 	uint8_t index = 0;
-	float adsr_counter = 1;
-	uint8_t midi_state;
+	//float adsr_counter = 1;
 	//uint8_t key_pressed;
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -78,25 +101,56 @@ int main(void)
   MX_TIM1_Init();
 
   // Generate lookup table
-  gen_table(sine_table, num_pts);
-  // Enable timer 1
+  gen_table(sine_table, NUM_PTS);
+
+  // Allocate space for temporary lookup tables
+  uint32_t key1_table[NUM_PTS];
+  uint32_t key2_table[NUM_PTS];
+
+  // Enable timers
   HAL_TIM_Base_Start(&htim1);
-  // Enable DAC
-  HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
+  HAL_TIM_Base_Start(&htim3);
+  HAL_TIM_Base_Start(&htim4);
 
-  // Debug adsr values
-  att_adc = 1024;
-  dec_adc = 500;
-  sus_adc = 1024;
-  rel_adc = 1024;
+  zero_array(key1_table, NUM_PTS);
+  zero_array(key2_table, NUM_PTS);
 
-  midi_read();
-
-  	while (1) {
+  // Enable DACs
+  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)key1_table, NUM_PTS, DAC_ALIGN_12B_R);
+  HAL_DAC_Start_DMA(&hdac2, DAC_CHANNEL_1, (uint32_t*)key2_table, NUM_PTS, DAC_ALIGN_12B_R);
 
 
+  struct note_info key1;
+  struct note_info key2;
 
-  		/*if (midi[0] == 0x90) {
+  key1.attack = 1024;
+  key1.decay = 512;
+  key1.sustain = 1024;
+  key1.release = 1024;
+  key1.status = OFF;
+  key1.state = ATTACK;
+
+  key2.attack = 1024;
+  key2.decay = 512;
+  key2.sustain = 1024;
+  key2.release = 1024;
+  key2.status = OFF;
+  key2.state = ATTACK;
+
+  while (1) {
+
+  		// have dma use an array of sine values but have another one that scales
+  		// and have the frequency be altered by a timer
+
+  		midi_read();
+  		if (midi[0] & 0x10) {
+
+  		}
+
+
+
+  		/*
+  		if (midi[0] == 0x90) {
   			// Turn on LED connected to PA6
   			MIDI_IN_LED_ON;
   			midi_state = ATTACK;
@@ -129,9 +183,9 @@ int main(void)
   				DAC_DATA = 0;
   				MIDI_IN_LED_OFF;
   			}
-  		}*/
-
-
+  		}
+*/
+/*
   		// 0x90 is NOTE ON on CHANNEL 0
   		if (midi[0] == 0x90) {
   			MIDI_IN_LED_ON;
@@ -152,7 +206,7 @@ int main(void)
   				midi_read();
   			}
   		}
-  	}
+*/  	}
 }
 
 void gen_table(uint32_t *t, uint8_t pts)
@@ -167,6 +221,13 @@ void gen_table(uint32_t *t, uint8_t pts)
 
 void midi_read(void) {
 	HAL_UART_Receive_IT(&huart1, midi, 3);
+}
+
+void zero_array(uint32_t *arr, uint8_t pts) {
+	uint8_t i;
+	for (i = 0; i < pts; i++) {
+		arr[i] = 0;
+	}
 }
 
 void delay_us (uint32_t us)
@@ -401,6 +462,161 @@ static void MX_GPIO_Init(void)
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
+
+}
+
+/**
+  * @brief DAC2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DAC2_Init(void)
+{
+
+  /* USER CODE BEGIN DAC2_Init 0 */
+
+  /* USER CODE END DAC2_Init 0 */
+
+  DAC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN DAC2_Init 1 */
+
+  /* USER CODE END DAC2_Init 1 */
+  /** DAC Initialization
+  */
+  hdac2.Instance = DAC2;
+  if (HAL_DAC_Init(&hdac2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** DAC channel OUT1 config
+  */
+  sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;
+  sConfig.DAC_DMADoubleDataMode = DISABLE;
+  sConfig.DAC_SignedFormat = DISABLE;
+  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_T4_TRGO;
+  sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
+  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
+  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
+  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
+  if (HAL_DAC_ConfigChannel(&hdac2, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DAC2_Init 2 */
+
+  /* USER CODE END DAC2_Init 2 */
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 0;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 65535;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+
+  /* USER CODE BEGIN TIM4_Init 0 */
+
+  /* USER CODE END TIM4_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 0;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 65535;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+
+  /* USER CODE END TIM4_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMAMUX1_CLK_ENABLE();
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+  /* DMA1_Channel2_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
 
 }
 
