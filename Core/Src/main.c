@@ -8,13 +8,16 @@
 #include "notes.h"
 
 #define F_CPU 170000000UL
-#define NOTE pitches[midi[1] + 5]
+#define NOTE pitches[midi_msg[1] + 5]
 #define MIDI_IN_LED_ON HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET)
 #define MIDI_IN_LED_OFF HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET)
 #define DAC_DATA DAC1->DHR12R1
 #define NUM_PTS 128
 #define ON 1
 #define OFF 0
+#define STATUS_BYTE midi_msg[0] & 0x90
+#define MIDI_STATUS_ON 0x90
+#define MIDI_STATUS_OFF 0x80
 
 /* Private variables ---------------------------------------------------------*/
 DAC_HandleTypeDef hdac1;
@@ -59,8 +62,9 @@ unsigned char midi_msg[3];
 //uint16_t rel_adc;
 
 struct note_info {
-	uint8_t status;
-	uint8_t state;
+	uint8_t current_status;
+	uint8_t prev_status;
+	uint8_t adsr_state;
 	uint16_t mult;
 	uint16_t attack;
 	uint16_t decay;
@@ -74,6 +78,8 @@ struct note_info {
 void gen_table(uint32_t *, uint8_t);
 // Zero out an array
 void zero_array(uint32_t *, uint8_t);
+// Copy data of one array to another one of same size
+void copy_array(uint32_t *, uint32_t *, uint8_t);
 // Recieve a 3-byte MIDI message
 void midi_read(void);
 // Delay amount of microseconds passed into function
@@ -82,7 +88,8 @@ void delay_us (uint32_t);
 int main(void)
 {
 	uint32_t sine_table[NUM_PTS];
-	uint8_t index = 0;
+	uint8_t index1 = 0;
+	uint8_t index2 = 0;
 	//float adsr_counter = 1;
 	//uint8_t key_pressed;
 
@@ -127,27 +134,61 @@ int main(void)
   key1.decay = 512;
   key1.sustain = 1024;
   key1.release = 1024;
-  key1.status = OFF;
-  key1.state = ATTACK;
+  key1.current_status = OFF;
 
   key2.attack = 1024;
   key2.decay = 512;
   key2.sustain = 1024;
   key2.release = 1024;
-  key2.status = OFF;
-  key2.state = ATTACK;
+  key2.current_status = OFF;
+
 
   while (1) {
 
   		// have dma use an array of sine values but have another one that scales
   		// and have the frequency be altered by a timer
 
-  		midi_read();
-  		if (midi[0] & 0x10) {
 
+
+  		// Preserve previous state of keys before changing current state
+  		key1.prev_status = key1.current_status;
+  		key2.prev_status = key2.current_status;
+
+  		// Get new midi message
+  		midi_read();
+
+  		// Determine on/off state of keys
+  		if ((STATUS_BYTE == MIDI_STATUS_ON) && (key1.current_status == OFF) && (key2.current_status == OFF)) {
+  			key1.status = ON;
+  			key1.state = ATTACK;
+  		} else if ((STATUS_BYTE == MIDI_STATUS_OFF) && (key1.current_status == ON) && (key2.current_status == OFF)) {
+  			key1.status = OFF;
+  		} else if ((STATUS_BYTE == MIDI_STATUS_ON) && (key1.current_status == ON) && (key2.current_status == OFF)) {
+  			key2.status = ON;
+  			key2.state = ATTACK;
+  		} else if ((STATUS_BYTE == MIDI_STATUS_OFF) && (key1.current_status == key2.current_status == ON)) {
+  			// Ambiguous, either note could turn off. Fix later
+  			key2.current_status = OFF;
   		}
 
 
+
+  		// Handle dma data
+  		if (key1.current_status == ON && key1.prev_status == OFF) {
+  			copy_array(key1_table, sine_table, NUM_PTS);
+  		}
+
+  		if (key2.current_status == ON && key2.prev_status == OFF) {
+  			copy_array(key2_table, sine_table, NUM_PTS);
+  		}
+
+  		if (key1.current_status == OFF && key1.prev_status == ON) {
+  			zero_array(key1_table, NUM_PTS);
+  		}
+
+  		if (key2.current_status == OFF && key2.prev_status == ON) {
+  		  			zero_array(key2_table, NUM_PTS);
+  		}
 
   		/*
   		if (midi[0] == 0x90) {
@@ -228,6 +269,14 @@ void zero_array(uint32_t *arr, uint8_t pts) {
 	for (i = 0; i < pts; i++) {
 		arr[i] = 0;
 	}
+}
+
+void copy_array(uint32_t *dst, uint32_t *src, uint8_t pts)
+{
+	uint8_t i;
+		for (i = 0; i < pts; i++) {
+			dst[i] = src[i];
+		}
 }
 
 void delay_us (uint32_t us)
