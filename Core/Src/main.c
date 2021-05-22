@@ -1,10 +1,11 @@
 /* Osiris Thomas
  * STM32 Synthesizer
- * Last edited: 5/19/21
+ * Last edited: 5/22/21
  */
 
 #include "main.h"
 #include <math.h>
+#include <string.h>
 #include "notes.h"
 
 #define F_CPU 170000000UL
@@ -15,7 +16,7 @@
 #define NUM_PTS 128
 #define ON 1
 #define OFF 0
-#define STATUS_BYTE midi_msg[0] & 0x90
+#define STATUS_BYTE (midi_msg[0] & 0x90)
 #define MIDI_STATUS_ON 0x90
 #define MIDI_STATUS_OFF 0x80
 
@@ -62,8 +63,8 @@ unsigned char midi_msg[3];
 //uint16_t rel_adc;
 
 struct note_info {
-	uint8_t current_status;
-	uint8_t prev_status;
+	uint8_t crt_sts;
+	uint8_t prv_sts;
 	uint8_t adsr_state;
 	uint16_t mult;
 	uint16_t attack;
@@ -80,7 +81,7 @@ void gen_table(uint32_t *, uint8_t);
 void zero_array(uint32_t *, uint8_t);
 // Copy data of one array to another one of same size
 void copy_array(uint32_t *, uint32_t *, uint8_t);
-// Recieve a 3-byte MIDI message
+// Receive a 3-byte MIDI message
 void midi_read(void);
 // Delay amount of microseconds passed into function
 void delay_us (uint32_t);
@@ -88,10 +89,27 @@ void delay_us (uint32_t);
 int main(void)
 {
 	uint32_t sine_table[NUM_PTS];
-	uint8_t index1 = 0;
-	uint8_t index2 = 0;
+	// Allocate space for temporary lookup tables
+	uint32_t key1_table[NUM_PTS];
+	uint32_t key2_table[NUM_PTS];
+	//uint8_t index1 = 0;
+	//uint8_t index2 = 0;
 	//float adsr_counter = 1;
 	//uint8_t key_pressed;
+	struct note_info key1;
+	struct note_info key2;
+
+	key1.attack = 1024;
+	key1.decay = 512;
+	key1.sustain = 1024;
+	key1.release = 1024;
+	key1.crt_sts = OFF;
+
+	key2.attack = 1024;
+	key2.decay = 512;
+	key2.sustain = 1024;
+	key2.release = 1024;
+	key2.crt_sts = OFF;
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -102,46 +120,34 @@ int main(void)
   SystemClock_Config();
 
   /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_DAC1_Init();
+  //MX_GPIO_Init();
   MX_USART1_UART_Init();
+  MX_DMA_Init();
+  MX_DAC1_Init();
+  MX_DAC2_Init();
   MX_TIM1_Init();
+  MX_TIM3_Init();
+  MX_TIM4_Init();
 
   // Generate lookup table
   gen_table(sine_table, NUM_PTS);
 
-  // Allocate space for temporary lookup tables
-  uint32_t key1_table[NUM_PTS];
-  uint32_t key2_table[NUM_PTS];
+  zero_array(key1_table, NUM_PTS);
+  zero_array(key2_table, NUM_PTS);
+
+  // Enable DACs
+  //HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
+  //HAL_DAC_Start(&hdac2, DAC_CHANNEL_1);
+  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, NUM_PTS, DAC_ALIGN_12B_R);
+  HAL_DAC_Start_DMA(&hdac2, DAC_CHANNEL_1, (uint32_t*)sine_table, NUM_PTS, DAC_ALIGN_12B_R);
 
   // Enable timers
   HAL_TIM_Base_Start(&htim1);
   HAL_TIM_Base_Start(&htim3);
   HAL_TIM_Base_Start(&htim4);
 
-  zero_array(key1_table, NUM_PTS);
-  zero_array(key2_table, NUM_PTS);
-
-  // Enable DACs
-  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)key1_table, NUM_PTS, DAC_ALIGN_12B_R);
-  HAL_DAC_Start_DMA(&hdac2, DAC_CHANNEL_1, (uint32_t*)key2_table, NUM_PTS, DAC_ALIGN_12B_R);
-
-
-  struct note_info key1;
-  struct note_info key2;
-
-  key1.attack = 1024;
-  key1.decay = 512;
-  key1.sustain = 1024;
-  key1.release = 1024;
-  key1.current_status = OFF;
-
-  key2.attack = 1024;
-  key2.decay = 512;
-  key2.sustain = 1024;
-  key2.release = 1024;
-  key2.current_status = OFF;
-
+  // Debug while 1 loop to prevent entering into main loop
+  while(1);
 
   while (1) {
 
@@ -151,44 +157,55 @@ int main(void)
 
 
   		// Preserve previous state of keys before changing current state
-  		key1.prev_status = key1.current_status;
-  		key2.prev_status = key2.current_status;
+  		key1.prv_sts = key1.crt_sts;
+  		key2.prv_sts = key2.crt_sts;
 
   		// Get new midi message
   		midi_read();
 
   		// Determine on/off state of keys
-  		if ((STATUS_BYTE == MIDI_STATUS_ON) && (key1.current_status == OFF) && (key2.current_status == OFF)) {
-  			key1.status = ON;
-  			key1.state = ATTACK;
-  		} else if ((STATUS_BYTE == MIDI_STATUS_OFF) && (key1.current_status == ON) && (key2.current_status == OFF)) {
-  			key1.status = OFF;
-  		} else if ((STATUS_BYTE == MIDI_STATUS_ON) && (key1.current_status == ON) && (key2.current_status == OFF)) {
-  			key2.status = ON;
-  			key2.state = ATTACK;
-  		} else if ((STATUS_BYTE == MIDI_STATUS_OFF) && (key1.current_status == key2.current_status == ON)) {
+  		if ((STATUS_BYTE == MIDI_STATUS_ON) && (key1.crt_sts == OFF) && (key2.crt_sts == OFF)) {
+  			key1.crt_sts = ON;
+  			key1.adsr_state = ATTACK;
+  		} else if ((STATUS_BYTE == MIDI_STATUS_OFF) && (key1.crt_sts == ON) && (key2.crt_sts == OFF)) {
+  			key1.crt_sts = OFF;
+  		} else if ((STATUS_BYTE == MIDI_STATUS_ON) && (key1.crt_sts == ON) && (key2.crt_sts == OFF)) {
+  			key2.crt_sts = ON;
+  			key2.adsr_state = ATTACK;
+  		} else if ((STATUS_BYTE == MIDI_STATUS_OFF) && (key1.crt_sts == (key2.crt_sts == ON))) {
   			// Ambiguous, either note could turn off. Fix later
-  			key2.current_status = OFF;
+  			key2.crt_sts = OFF;
   		}
 
-
+  		// Determine midi LED status
+  		/*if (key1.crt_sts == ON || key2.crt_sts == ON)
+  			MIDI_IN_LED_ON;
+  		else
+  			MIDI_IN_LED_OFF;*/
 
   		// Handle dma data
-  		if (key1.current_status == ON && key1.prev_status == OFF) {
+  		if ((key1.crt_sts == ON) && (key1.prv_sts == OFF)) {
   			copy_array(key1_table, sine_table, NUM_PTS);
   		}
 
-  		if (key2.current_status == ON && key2.prev_status == OFF) {
+  		if ((key2.crt_sts == ON) && (key2.prv_sts == OFF)) {
   			copy_array(key2_table, sine_table, NUM_PTS);
   		}
 
-  		if (key1.current_status == OFF && key1.prev_status == ON) {
+  		if ((key1.crt_sts == OFF) && (key1.prv_sts == ON)) {
   			zero_array(key1_table, NUM_PTS);
   		}
 
-  		if (key2.current_status == OFF && key2.prev_status == ON) {
-  		  			zero_array(key2_table, NUM_PTS);
+  		if ((key2.crt_sts == OFF) && (key2.prv_sts == ON)) {
+  		  	zero_array(key2_table, NUM_PTS);
   		}
+
+
+
+
+
+
+
 
   		/*
   		if (midi[0] == 0x90) {
@@ -261,14 +278,11 @@ void gen_table(uint32_t *t, uint8_t pts)
 }
 
 void midi_read(void) {
-	HAL_UART_Receive_IT(&huart1, midi, 3);
+	HAL_UART_Receive_IT(&huart1, midi_msg, 3);
 }
 
 void zero_array(uint32_t *arr, uint8_t pts) {
-	uint8_t i;
-	for (i = 0; i < pts; i++) {
-		arr[i] = 0;
-	}
+	memset(arr, 0, pts);
 }
 
 void copy_array(uint32_t *dst, uint32_t *src, uint8_t pts)
@@ -369,7 +383,7 @@ static void MX_DAC1_Init(void)
   sConfig.DAC_DMADoubleDataMode = DISABLE;
   sConfig.DAC_SignedFormat = DISABLE;
   sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_T3_TRGO;
   sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
   sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
   sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
@@ -381,6 +395,51 @@ static void MX_DAC1_Init(void)
   /* USER CODE BEGIN DAC1_Init 2 */
 
   /* USER CODE END DAC1_Init 2 */
+
+}
+
+/**
+  * @brief DAC2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DAC2_Init(void)
+{
+
+  /* USER CODE BEGIN DAC2_Init 0 */
+
+  /* USER CODE END DAC2_Init 0 */
+
+  DAC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN DAC2_Init 1 */
+
+  /* USER CODE END DAC2_Init 1 */
+  /** DAC Initialization
+  */
+  hdac2.Instance = DAC2;
+  if (HAL_DAC_Init(&hdac2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** DAC channel OUT1 config
+  */
+  sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;
+  sConfig.DAC_DMADoubleDataMode = DISABLE;
+  sConfig.DAC_SignedFormat = DISABLE;
+  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_T4_TRGO;
+  sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
+  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
+  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
+  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
+  if (HAL_DAC_ConfigChannel(&hdac2, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DAC2_Init 2 */
+
+  /* USER CODE END DAC2_Init 2 */
 
 }
 
@@ -515,51 +574,6 @@ static void MX_GPIO_Init(void)
 }
 
 /**
-  * @brief DAC2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_DAC2_Init(void)
-{
-
-  /* USER CODE BEGIN DAC2_Init 0 */
-
-  /* USER CODE END DAC2_Init 0 */
-
-  DAC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN DAC2_Init 1 */
-
-  /* USER CODE END DAC2_Init 1 */
-  /** DAC Initialization
-  */
-  hdac2.Instance = DAC2;
-  if (HAL_DAC_Init(&hdac2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /** DAC channel OUT1 config
-  */
-  sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;
-  sConfig.DAC_DMADoubleDataMode = DISABLE;
-  sConfig.DAC_SignedFormat = DISABLE;
-  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_T4_TRGO;
-  sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
-  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
-  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
-  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
-  if (HAL_DAC_ConfigChannel(&hdac2, &sConfig, DAC_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN DAC2_Init 2 */
-
-  /* USER CODE END DAC2_Init 2 */
-
-}
-
-/**
   * @brief TIM3 Initialization Function
   * @param None
   * @retval None
@@ -660,12 +674,12 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMA1_CLK_ENABLE();
 
   /* DMA interrupt init */
-  /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
   /* DMA1_Channel2_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
 
 }
 
