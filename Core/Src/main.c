@@ -45,10 +45,10 @@ static void MX_TIM4_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 enum {
-ATTACK = 0,
-DECAY,
-SUSTAIN,
-RELEASE
+	ATTACK = 0,
+	DECAY,
+	SUSTAIN,
+	RELEASE
 };
 
 // Global midi note variable
@@ -92,24 +92,11 @@ int main(void)
 	// Allocate space for temporary lookup tables
 	uint32_t key1_table[NUM_PTS];
 	uint32_t key2_table[NUM_PTS];
-	//uint8_t index1 = 0;
+	uint8_t index1 = 0;
 	//uint8_t index2 = 0;
 	//float adsr_counter = 1;
 	//uint8_t key_pressed;
-	struct note_info key1;
-	struct note_info key2;
 
-	key1.attack = 1024;
-	key1.decay = 512;
-	key1.sustain = 1024;
-	key1.release = 1024;
-	key1.crt_sts = OFF;
-
-	key2.attack = 1024;
-	key2.decay = 512;
-	key2.sustain = 1024;
-	key2.release = 1024;
-	key2.crt_sts = OFF;
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -120,9 +107,9 @@ int main(void)
   SystemClock_Config();
 
   /* Initialize all configured peripherals */
-  //MX_GPIO_Init();
+  MX_GPIO_Init();
   MX_USART1_UART_Init();
-  MX_DMA_Init();
+ // MX_DMA_Init();
   MX_DAC1_Init();
   MX_DAC2_Init();
   MX_TIM1_Init();
@@ -136,18 +123,33 @@ int main(void)
   zero_array(key2_table, NUM_PTS);
 
   // Enable DACs
-  //HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
+  HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
   //HAL_DAC_Start(&hdac2, DAC_CHANNEL_1);
-  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, NUM_PTS, DAC_ALIGN_12B_R);
-  HAL_DAC_Start_DMA(&hdac2, DAC_CHANNEL_1, (uint32_t*)sine_table, NUM_PTS, DAC_ALIGN_12B_R);
+  //HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, NUM_PTS, DAC_ALIGN_12B_R);
+  //HAL_DAC_Start_DMA(&hdac2, DAC_CHANNEL_1, (uint32_t*)sine_table, NUM_PTS, DAC_ALIGN_12B_R);
 
   // Enable timers
   HAL_TIM_Base_Start(&htim1);
   HAL_TIM_Base_Start(&htim3);
   HAL_TIM_Base_Start(&htim4);
 
+  struct note_info key1;
+  struct note_info key2;
+
+  key1.attack = 1024;
+  key1.decay = 512;
+  key1.sustain = 1024;
+  key1.release = 1024;
+  key1.crt_sts = OFF;
+
+  key2.attack = 1024;
+  key2.decay = 512;
+  key2.sustain = 1024;
+  key2.release = 1024;
+  key2.crt_sts = OFF;
+
   // Debug while 1 loop to prevent entering into main loop
-  while(1);
+  //while(1);
 
   while (1) {
 
@@ -163,94 +165,14 @@ int main(void)
   		// Get new midi message
   		midi_read();
 
-  		// Determine on/off state of keys
-  		if ((STATUS_BYTE == MIDI_STATUS_ON) && (key1.crt_sts == OFF) && (key2.crt_sts == OFF)) {
-  			key1.crt_sts = ON;
-  			key1.adsr_state = ATTACK;
-  		} else if ((STATUS_BYTE == MIDI_STATUS_OFF) && (key1.crt_sts == ON) && (key2.crt_sts == OFF)) {
-  			key1.crt_sts = OFF;
-  		} else if ((STATUS_BYTE == MIDI_STATUS_ON) && (key1.crt_sts == ON) && (key2.crt_sts == OFF)) {
-  			key2.crt_sts = ON;
-  			key2.adsr_state = ATTACK;
-  		} else if ((STATUS_BYTE == MIDI_STATUS_OFF) && (key1.crt_sts == (key2.crt_sts == ON))) {
-  			// Ambiguous, either note could turn off. Fix later
-  			key2.crt_sts = OFF;
-  		}
-
-  		// Determine midi LED status
-  		/*if (key1.crt_sts == ON || key2.crt_sts == ON)
-  			MIDI_IN_LED_ON;
-  		else
-  			MIDI_IN_LED_OFF;*/
-
-  		// Handle dma data
-  		if ((key1.crt_sts == ON) && (key1.prv_sts == OFF)) {
-  			copy_array(key1_table, sine_table, NUM_PTS);
-  		}
-
-  		if ((key2.crt_sts == ON) && (key2.prv_sts == OFF)) {
-  			copy_array(key2_table, sine_table, NUM_PTS);
-  		}
-
-  		if ((key1.crt_sts == OFF) && (key1.prv_sts == ON)) {
-  			zero_array(key1_table, NUM_PTS);
-  		}
-
-  		if ((key2.crt_sts == OFF) && (key2.prv_sts == ON)) {
-  		  	zero_array(key2_table, NUM_PTS);
-  		}
-
-
-
-
-
-
-
-
-  		/*
-  		if (midi[0] == 0x90) {
-  			// Turn on LED connected to PA6
-  			MIDI_IN_LED_ON;
-  			midi_state = ATTACK;
-
-  			switch(midi_state) {
-  			case ATTACK:
-  				adsr_counter = 0;
-  				while (adsr_counter <= att_adc) {
-  					DAC_DATA = sine_table[index++] * (adsr_counter++/1024.);
-  					delay_us(10000/NOTE);
-  					if (index == num_pts) index = 0;
-  				}
-  				midi_state = DECAY;
-  			case DECAY:
-  				while (adsr_counter >= dec_adc) {
-  					DAC_DATA = sine_table[index++] * (adsr_counter--/1024.);
-  					delay_us(10000/NOTE);
-  					if (index == num_pts) index = 0;
-  				}
-  				midi_state = SUSTAIN;
-  			case SUSTAIN:
-  				while (midi[0] == 0x90) {
-  					DAC_DATA = sine_table[index++] * (adsr_counter/1024.);
-  					delay_us(10000/NOTE);
-  					if (index == num_pts) index = 0;
-  					midi_read();
-  				}
-  				midi_state = RELEASE;
-  			case RELEASE:
-  				DAC_DATA = 0;
-  				MIDI_IN_LED_OFF;
-  			}
-  		}
-*/
-/*
   		// 0x90 is NOTE ON on CHANNEL 0
-  		if (midi[0] == 0x90) {
+  		if (midi_msg[0] == 0x90) {
   			MIDI_IN_LED_ON;
-  			while (midi[0] == 0x90) {
-  				DAC_DATA = sine_table[index++]/adsr_counter;
-  				adsr_counter += 0.001;
-  				if (index == num_pts) index = 0;
+  			while (midi_msg[0] == 0x90) {
+  				// Put next note sample onto DAC
+  				DAC_DATA = sine_table[index1++];
+  				if (index1 == NUM_PTS) index1 = 0;
+  				// Add comment here why 10000
   				delay_us(10000/NOTE);
   				midi_read();
   			}
@@ -258,13 +180,13 @@ int main(void)
   		} else {
   			// Turn off LED connected to PA6
   			MIDI_IN_LED_OFF;
-  			adsr_counter = 1;
-  			while (midi[0] == 0x80) {
+  			//adsr_counter = 1;
+  			while (midi_msg[0] == 0x80) {
   				DAC_DATA = 0;
   				midi_read();
   			}
   		}
-*/  	}
+	}
 }
 
 void gen_table(uint32_t *t, uint8_t pts)
@@ -383,7 +305,7 @@ static void MX_DAC1_Init(void)
   sConfig.DAC_DMADoubleDataMode = DISABLE;
   sConfig.DAC_SignedFormat = DISABLE;
   sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_T3_TRGO;
+  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
   sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
   sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
   sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
