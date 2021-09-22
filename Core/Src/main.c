@@ -1,49 +1,93 @@
+/* USER CODE BEGIN Header */
+/**
+  ******************************************************************************
+  * @file           : main.c
+  * @brief          : Main program body
+  ******************************************************************************
+  * @attention
+  *
+  * <h2><center>&copy; Copyright (c) 2021 STMicroelectronics.
+  * All rights reserved.</center></h2>
+  *
+  * This software component is licensed by ST under BSD 3-Clause license,
+  * the "License"; You may not use this file except in compliance with the
+  * License. You may obtain a copy of the License at:
+  *                        opensource.org/licenses/BSD-3-Clause
+  *
+  ******************************************************************************
+ */
 /* Osiris Thomas
  * STM32 Synthesizer
  * Last edited: 5/22/21
  */
 
+/* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "macros.h"
+#include "notes.h"
 #include <math.h>
 #include <string.h>
-#include "notes.h"
 
-#define F_CPU 170000000UL
-#define NOTE pitches[midi_msg[1] + 5]
-#define MIDI_IN_LED_ON HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET)
-#define MIDI_IN_LED_OFF HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET)
-#define DAC_DATA DAC1->DHR12R1
-#define NUM_PTS 128
-#define ON 1
-#define OFF 0
-#define STATUS_BYTE (midi_msg[0] & 0x90)
-#define MIDI_STATUS_ON 0x90
-#define MIDI_STATUS_OFF 0x80
 
 /* Private variables ---------------------------------------------------------*/
 DAC_HandleTypeDef hdac1;
-DAC_HandleTypeDef hdac2;
-DMA_HandleTypeDef hdma_dac1_ch1;
-DMA_HandleTypeDef hdma_dac2_ch1;
+
 TIM_HandleTypeDef htim1;
-TIM_HandleTypeDef htim3;
-TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim6;
+TIM_HandleTypeDef htim7;
+TIM_HandleTypeDef htim8;
+
 UART_HandleTypeDef huart1;
+
+
+// Global midi note variable
+unsigned char midi_msg[3];
+unsigned char midi_tmp[3];
+
+// Sine LUT
+uint16_t sin_lut[NUM_PTS] = {2048,2148,2248,2348,2447,2545,2642,2737,2831,2923,3013,3100,3185,3267,3346,3423,3495,3565,3630,3692,3750,3804,3853,3898,3939,3975,4007,4034,4056,4073,4085,4093,4095,4093,4085,4073,4056,4034,4007,3975,3939,3898,3853,3804,3750,3692,3630,3565,3495,3423,3346,3267,3185,3100,3013,2923,2831,2737,2642,2545,2447,2348,2248,2148,2048,1947,1847,1747,1648,1550,1453,1358,1264,1172,1082,995,910,828,749,672,600,530,465,403,345,291,242,197,156,120,88,61,39,22,10,2,0,2,10,22,39,61,88,120,156,197,242,291,345,403,465,530,600,672,749,828,910,995,1082,1172,1264,1358,1453,1550,1648,1747,1847,1947};
+
+// Triangle LUT
+uint16_t tri_lut[NUM_PTS] = {64,128,192,256,320,384,448,512,576,640,704,768,832,896,960,1024,1088,1152,1216,1280,1344,1408,1472,1536,1600,1664,1728,1792,1856,1920,1984,2048,2111,2175,2239,2303,2367,2431,2495,2559,2623,2687,2751,2815,2879,2943,3007,3071,3135,3199,3263,3327,3391,3455,3519,3583,3647,3711,3775,3839,3903,3967,4031,4095,4031,3967,3903,3839,3775,3711,3647,3583,3519,3455,3391,3327,3263,3199,3135,3071,3007,2943,2879,2815,2751,2687,2623,2559,2495,2431,2367,2303,2239,2175,2111,2048,1984,1920,1856,1792,1728,1664,1600,1536,1472,1408,1344,1280,1216,1152,1088,1024,960,896,832,768,704,640,576,512,448,384,320,256,192,128,64,0};
+
+// Sawtooth LUT
+uint16_t saw_lut[NUM_PTS] = {0,32,64,96,128,160,192,224,256,288,320,352,384,416,448,480,512,544,576,608,640,672,704,736,768,800,832,864,896,928,960,992,1024,1056,1088,1120,1152,1184,1216,1248,1280,1312,1344,1376,1408,1440,1472,1504,1536,1568,1600,1632,1664,1696,1728,1760,1792,1824,1856,1888,1920,1952,1984,2016,2048,2080,2112,2144,2176,2208,2240,2272,2304,2336,2368,2400,2432,2464,2496,2528,2560,2592,2624,2656,2688,2720,2752,2784,2816,2848,2880,2912,2944,2976,3008,3040,3072,3104,3136,3168,3200,3232,3264,3296,3328,3360,3392,3424,3456,3488,3520,3552,3584,3616,3648,3680,3712,3744,3776,3808,3840,3872,3904,3936,3968,4000,4032,4064};
+
+// Exponential LUT
+uint16_t exp_lut[NUM_PTS] = {0,126,248,366,481,592,700,805,906,1004,1099,1191,1281,1367,1451,1532,1611,1688,1762,1834,1903,1971,2036,2099,2161,2220,2278,2334,2388,2440,2491,2541,2589,2635,2680,2723,2766,2806,2846,2885,2922,2958,2993,3027,3060,3091,3122,3152,3181,3209,3237,3263,3289,3313,3338,3361,3383,3405,3427,3447,3467,3486,3505,3523,3541,3558,3574,3590,3606,3621,3636,3650,3663,3677,3690,3702,3714,3726,3737,3748,3759,3769,3779,3789,3798,3807,3816,3825,3833,3841,3849,3857,3864,3871,3878,3885,3891,3897,3903,3909,3915,3921,3926,3931,3936,3941,3946,3950,3955,3959,3963,3967,3971,3975,3979,3982,3986,3989,3992,3996,3999,4002,4005,4007,4010,4013,4015,4018};
+
+// Square LUT
+uint16_t sqr_lut[NUM_PTS] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095};
 
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DAC1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM1_Init(void);
-static void MX_DMA_Init(void);
-static void MX_DAC1_Init(void);
-static void MX_DAC2_Init(void);
-static void MX_TIM3_Init(void);
-static void MX_TIM4_Init(void);
-
+static void MX_TIM6_Init(void);
+static void MX_TIM7_Init(void);
+static void MX_TIM8_Init(void);
+/* USER CODE BEGIN PFP */
+// Zero out an array
+void zero_array(uint32_t *, uint8_t);
+// Copy data of one array to another one of same size
+void copy_array(uint32_t *, uint32_t *, uint8_t);
+// Delay amount of microseconds passed into function
+void delay_us (uint32_t);
+/* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
 enum {
 	ATTACK = 0,
 	DECAY,
@@ -51,156 +95,76 @@ enum {
 	RELEASE
 };
 
-// Global midi note variable
-unsigned char midi_msg[3];
-// ADSR multiplier
-//uint16_t adsr_mult;
-
-// Global ADSR pot ADC values
-//uint16_t att_adc;
-//uint16_t dec_adc;
-//uint16_t sus_adc;
-//uint16_t rel_adc;
-
-struct note_info {
-	uint8_t crt_sts;
-	uint8_t prv_sts;
+struct voice {
+	uint8_t status;
 	uint8_t adsr_state;
-	uint16_t mult;
-	uint16_t attack;
-	uint16_t decay;
-	uint16_t sustain;
-	uint16_t release;
-
+	uint16_t att_val;
+	uint16_t dec_val;
+	uint16_t sus_val;
+	uint16_t rel_val;
+	uint16_t note;
+	uint8_t index;
 };
 
+/* Global variables */
+// Voices
+struct voice voices[3];
+// Look up table used in wavetable synthesis
+uint16_t *lut = sin_lut;
+// Current number of notes on
+uint8_t notes_on = 0;
 
-// Generate sine lookup table with predefined amount of points
-void gen_table(uint32_t *, uint8_t);
-// Zero out an array
-void zero_array(uint32_t *, uint8_t);
-// Copy data of one array to another one of same size
-void copy_array(uint32_t *, uint32_t *, uint8_t);
-// Receive a 3-byte MIDI message
-void midi_read(void);
-// Delay amount of microseconds passed into function
-void delay_us (uint32_t);
 
 int main(void)
 {
-	uint32_t sine_table[NUM_PTS];
-	// Allocate space for temporary lookup tables
-	uint32_t key1_table[NUM_PTS];
-	uint32_t key2_table[NUM_PTS];
-	uint8_t index1 = 0;
-	//uint8_t index2 = 0;
-	//float adsr_counter = 1;
-	//uint8_t key_pressed;
-
-
-  /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
   /* Configure the system clock */
   SystemClock_Config();
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART1_UART_Init();
- // MX_DMA_Init();
+  //MX_DMA_Init();
   MX_DAC1_Init();
-  MX_DAC2_Init();
+  //MX_DAC2_Init();
   MX_TIM1_Init();
-  MX_TIM3_Init();
-  MX_TIM4_Init();
+  MX_TIM6_Init();
+  MX_TIM7_Init();
+  MX_TIM8_Init();
 
-  // Generate lookup table
-  gen_table(sine_table, NUM_PTS);
-
-  zero_array(key1_table, NUM_PTS);
-  zero_array(key2_table, NUM_PTS);
-
-  // Enable DACs
+  // Enable DAC
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
-  //HAL_DAC_Start(&hdac2, DAC_CHANNEL_1);
-  //HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)sine_table, NUM_PTS, DAC_ALIGN_12B_R);
-  //HAL_DAC_Start_DMA(&hdac2, DAC_CHANNEL_1, (uint32_t*)sine_table, NUM_PTS, DAC_ALIGN_12B_R);
 
   // Enable timers
   HAL_TIM_Base_Start(&htim1);
-  HAL_TIM_Base_Start(&htim3);
-  HAL_TIM_Base_Start(&htim4);
+  HAL_TIM_Base_Start_IT(&htim6);
+  HAL_TIM_Base_Start_IT(&htim7);
+  HAL_TIM_Base_Start_IT(&htim8);
 
-  struct note_info key1;
-  struct note_info key2;
+  voices[0].status = 1;
+  voices[1].status = 1;
+  voices[2].status = 0;
 
-  key1.attack = 1024;
-  key1.decay = 512;
-  key1.sustain = 1024;
-  key1.release = 1024;
-  key1.crt_sts = OFF;
+  voices[0].index = 0;
+  voices[1].index = 0;
+  voices[2].index = 0;
 
-  key2.attack = 1024;
-  key2.decay = 512;
-  key2.sustain = 1024;
-  key2.release = 1024;
-  key2.crt_sts = OFF;
+  notes_on = 2;
 
-  // Debug while 1 loop to prevent entering into main loop
-  //while(1);
+  TIM6->ARR = ARR_VAL(C4);
+  TIM7->ARR = ARR_VAL(E4);
+  TIM8->ARR = ARR_VAL(F4);
 
+  lut = saw_lut;
+
+  // Main loop - read MIDI and play notes on DAC
+  // DAC data handled in UART interrupt callback
   while (1) {
+	  HAL_UART_Receive_IT(&huart1, midi_tmp, 3);
 
-  		// have dma use an array of sine values but have another one that scales
-  		// and have the frequency be altered by a timer
-
-
-
-  		// Preserve previous state of keys before changing current state
-  		key1.prv_sts = key1.crt_sts;
-  		key2.prv_sts = key2.crt_sts;
-
-  		// Get new midi message
-  		midi_read();
-
-  		// 0x90 is NOTE ON on CHANNEL 0
-  		if (midi_msg[0] == 0x90) {
-  			MIDI_IN_LED_ON;
-  			while (midi_msg[0] == 0x90) {
-  				// Put next note sample onto DAC
-  				DAC_DATA = sine_table[index1++];
-  				if (index1 == NUM_PTS) index1 = 0;
-  				// Add comment here why 10000
-  				delay_us(10000/NOTE);
-  				midi_read();
-  			}
-  			// 0x80 is NOTE OFF on CHANNEL 0
-  		} else {
-  			// Turn off LED connected to PA6
-  			MIDI_IN_LED_OFF;
-  			//adsr_counter = 1;
-  			while (midi_msg[0] == 0x80) {
-  				DAC_DATA = 0;
-  				midi_read();
-  			}
-  		}
-	}
-}
-
-void gen_table(uint32_t *t, uint8_t pts)
-{
-	float i;
-	int n = 0;
-	float inc = 2 * M_PI / pts;
-	for (i = 0; i < 2 * M_PI; i = i + inc) {
-		t[n++] = 4096 * ((sin(i) + 1) / 2);
-	}
-}
-
-void midi_read(void) {
-	HAL_UART_Receive_IT(&huart1, midi_msg, 3);
+  }
 }
 
 void zero_array(uint32_t *arr, uint8_t pts) {
@@ -226,6 +190,38 @@ void delay_us (uint32_t us)
   * @brief System Clock Configuration
   * @retval None
   */
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	if (htim == &htim6) {
+		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (1./notes_on) * (voices[0].status*lut[voices[0].index++] + voices[1].status*lut[voices[1].index] + voices[2].status*lut[voices[2].index]));
+		if (voices[0].index == NUM_PTS) voices[0].index = 0;
+	}
+	else if (htim == &htim7) {
+		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (1./notes_on) * (voices[0].status*lut[voices[0].index] + voices[1].status*lut[voices[1].index++] + voices[2].status*lut[voices[2].index]));
+		if (voices[1].index == NUM_PTS) voices[1].index = 0;
+	}
+	else if (htim == &htim8) {
+		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (1./notes_on) * (voices[0].status*lut[voices[0].index] + voices[1].status*lut[voices[1].index] + voices[2].status*lut[voices[2].index++]));
+		if (voices[2].index == NUM_PTS) voices[2].index = 0;
+	}
+
+
+
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+	TIM6->ARR = ARR_VAL(NOTE);
+	if (midi_tmp[0] == 0x90 || midi_tmp[0] == 0x80) {
+		uint8_t i;
+		for (i = 0; i < 3; i++) {
+			midi_msg[i] = midi_tmp[i];
+		}
+	}
+}
+
+
 void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
@@ -321,51 +317,6 @@ static void MX_DAC1_Init(void)
 }
 
 /**
-  * @brief DAC2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_DAC2_Init(void)
-{
-
-  /* USER CODE BEGIN DAC2_Init 0 */
-
-  /* USER CODE END DAC2_Init 0 */
-
-  DAC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN DAC2_Init 1 */
-
-  /* USER CODE END DAC2_Init 1 */
-  /** DAC Initialization
-  */
-  hdac2.Instance = DAC2;
-  if (HAL_DAC_Init(&hdac2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /** DAC channel OUT1 config
-  */
-  sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;
-  sConfig.DAC_DMADoubleDataMode = DISABLE;
-  sConfig.DAC_SignedFormat = DISABLE;
-  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_T4_TRGO;
-  sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
-  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
-  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
-  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
-  if (HAL_DAC_ConfigChannel(&hdac2, &sConfig, DAC_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN DAC2_Init 2 */
-
-  /* USER CODE END DAC2_Init 2 */
-
-}
-
-/**
   * @brief TIM1 Initialization Function
   * @param None
   * @retval None
@@ -409,6 +360,129 @@ static void MX_TIM1_Init(void)
   /* USER CODE BEGIN TIM1_Init 2 */
 
   /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
+  * @brief TIM6 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM6_Init(void)
+{
+
+  /* USER CODE BEGIN TIM6_Init 0 */
+
+  /* USER CODE END TIM6_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM6_Init 1 */
+
+  /* USER CODE END TIM6_Init 1 */
+  htim6.Instance = TIM6;
+  htim6.Init.Prescaler = 0;
+  htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim6.Init.Period = ARR_VAL(C4);
+  htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim6, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM6_Init 2 */
+
+  /* USER CODE END TIM6_Init 2 */
+
+}
+
+/**
+  * @brief TIM7 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM7_Init(void)
+{
+
+  /* USER CODE BEGIN TIM7_Init 0 */
+
+  /* USER CODE END TIM7_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM7_Init 1 */
+
+  /* USER CODE END TIM7_Init 1 */
+  htim7.Instance = TIM7;
+  htim7.Init.Prescaler = 0;
+  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim7.Init.Period = ARR_VAL(C4);
+  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM7_Init 2 */
+
+  /* USER CODE END TIM7_Init 2 */
+
+}
+
+/**
+  * @brief TIM8 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM8_Init(void)
+{
+
+  /* USER CODE BEGIN TIM8_Init 0 */
+
+  /* USER CODE END TIM8_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM8_Init 1 */
+
+  /* USER CODE END TIM8_Init 1 */
+  htim8.Instance = TIM8;
+  htim8.Init.Prescaler = 0;
+  htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim8.Init.Period = ARR_VAL(C4);
+  htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim8.Init.RepetitionCounter = 0;
+  htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim8, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM8_Init 2 */
+
+  /* USER CODE END TIM8_Init 2 */
 
 }
 
@@ -467,141 +541,11 @@ static void MX_USART1_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : B1_Pin */
-  GPIO_InitStruct.Pin = B1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PA6 */
-  GPIO_InitStruct.Pin = GPIO_PIN_6;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
-
-}
-
-/**
-  * @brief TIM3 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM3_Init(void)
-{
-
-  /* USER CODE BEGIN TIM3_Init 0 */
-
-  /* USER CODE END TIM3_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM3_Init 1 */
-
-  /* USER CODE END TIM3_Init 1 */
-  htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
-  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 65535;
-  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM3_Init 2 */
-
-  /* USER CODE END TIM3_Init 2 */
-
-}
-
-/**
-  * @brief TIM4 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM4_Init(void)
-{
-
-  /* USER CODE BEGIN TIM4_Init 0 */
-
-  /* USER CODE END TIM4_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM4_Init 1 */
-
-  /* USER CODE END TIM4_Init 1 */
-  htim4.Instance = TIM4;
-  htim4.Init.Prescaler = 0;
-  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 65535;
-  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM4_Init 2 */
-
-  /* USER CODE END TIM4_Init 2 */
-
-}
-
-/**
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void)
-{
-
-  /* DMA controller clock enable */
-  __HAL_RCC_DMAMUX1_CLK_ENABLE();
-  __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Channel2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
-  /* DMA1_Channel3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+  __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
 
 }
 
