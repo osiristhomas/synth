@@ -18,7 +18,7 @@
  */
 /* Osiris Thomas
  * STM32 Synthesizer
- * Last edited: 5/22/21
+ * Last edited: 9/23/21
  */
 
 /* USER CODE END Header */
@@ -32,7 +32,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 DAC_HandleTypeDef hdac1;
-
+ADC_HandleTypeDef hadc2;
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
@@ -70,6 +70,7 @@ static void MX_TIM1_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_TIM8_Init(void);
+static void MX_ADC2_Init(void);
 /* USER CODE BEGIN PFP */
 // Zero out an array
 void zero_array(uint32_t *, uint8_t);
@@ -129,6 +130,7 @@ int main(void)
   //MX_DMA_Init();
   MX_DAC1_Init();
   //MX_DAC2_Init();
+  MX_ADC2_Init();
   MX_TIM1_Init();
   MX_TIM6_Init();
   MX_TIM7_Init();
@@ -155,15 +157,20 @@ int main(void)
 
   TIM6->ARR = ARR_VAL(C4);
   TIM7->ARR = ARR_VAL(E4);
-  TIM8->ARR = ARR_VAL(F4);
+  TIM8->ARR = ARR_VAL(G4);
 
-  lut = saw_lut;
+  lut = sin_lut;
 
   // Main loop - read MIDI and play notes on DAC
   // DAC data handled in UART interrupt callback
   while (1) {
 	  HAL_UART_Receive_IT(&huart1, midi_tmp, 3);
-
+	  if (GLOBAL_MIDI_NOTE_ON) {
+		  MIDI_IN_LED_ON;
+	  }
+	  else if (GLOBAL_MIDI_NOTE_OFF) {
+		  MIDI_IN_LED_OFF;
+	  }
   }
 }
 
@@ -193,6 +200,20 @@ void delay_us (uint32_t us)
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
+
+	if (htim == &htim6) {
+		PUT_TO_DAC(VOICE0);
+		if (voices[0].index == NUM_PTS) voices[0].index = 0;
+	}
+	else if (htim == &htim7) {
+		PUT_TO_DAC(VOICE1);
+		if (voices[1].index == NUM_PTS) voices[1].index = 0;
+	}
+	else if (htim == &htim8) {
+		PUT_TO_DAC(VOICE2);
+		if (voices[2].index == NUM_PTS) voices[2].index = 0;
+	}
+	/*
 	if (htim == &htim6) {
 		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (1./notes_on) * (voices[0].status*lut[voices[0].index++] + voices[1].status*lut[voices[1].index] + voices[2].status*lut[voices[2].index]));
 		if (voices[0].index == NUM_PTS) voices[0].index = 0;
@@ -205,7 +226,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (1./notes_on) * (voices[0].status*lut[voices[0].index] + voices[1].status*lut[voices[1].index] + voices[2].status*lut[voices[2].index++]));
 		if (voices[2].index == NUM_PTS) voices[2].index = 0;
 	}
-
+*/
 
 
 }
@@ -269,6 +290,65 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+static void MX_ADC2_Init(void)
+{
+
+  /* USER CODE BEGIN ADC2_Init 0 */
+
+  /* USER CODE END ADC2_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC2_Init 1 */
+
+  /* USER CODE END ADC2_Init 1 */
+  /** Common config
+  */
+  hadc2.Instance = ADC2;
+  hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc2.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc2.Init.GainCompensation = 0;
+  hadc2.Init.ScanConvMode = ADC_SCAN_ENABLE;
+  hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc2.Init.LowPowerAutoWait = DISABLE;
+  hadc2.Init.ContinuousConvMode = ENABLE;
+  hadc2.Init.NbrOfConversion = 2;
+  hadc2.Init.DiscontinuousConvMode = DISABLE;
+  hadc2.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc2.Init.DMAContinuousRequests = DISABLE;
+  hadc2.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc2.Init.OversamplingMode = DISABLE;
+  if (HAL_ADC_Init(&hadc2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_1;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Regular Channel
+  */
+  sConfig.Rank = ADC_REGULAR_RANK_2;
+  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC2_Init 2 */
+
+  /* USER CODE END ADC2_Init 2 */
+
 }
 
 /**
@@ -541,11 +621,22 @@ static void MX_USART1_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
+	GPIO_InitTypeDef GPIO_InitStruct = {0};
 
-  /* GPIO Ports Clock Enable */
+	/* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_RESET);
+
+    /*Configure GPIO pin : PB11 */
+    GPIO_InitStruct.Pin = GPIO_PIN_11;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 }
 
