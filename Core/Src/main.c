@@ -146,14 +146,14 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim8);
 
   voices[0].status = 1;
-  voices[1].status = 1;
+  voices[1].status = 0;
   voices[2].status = 0;
 
   voices[0].index = 0;
   voices[1].index = 0;
   voices[2].index = 0;
 
-  notes_on = 2;
+  notes_on = 1;
 
   TIM6->ARR = ARR_VAL(C4);
   TIM7->ARR = ARR_VAL(E4);
@@ -164,6 +164,7 @@ int main(void)
   // Main loop - read MIDI and play notes on DAC
   // DAC data handled in UART interrupt callback
   while (1) {
+	  //TODO put in function
 	  HAL_UART_Receive_IT(&huart1, midi_tmp, 3);
 	  if (GLOBAL_MIDI_NOTE_ON) {
 		  MIDI_IN_LED_ON;
