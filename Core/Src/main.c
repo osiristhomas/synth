@@ -37,6 +37,7 @@ TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
 TIM_HandleTypeDef htim8;
+COMP_HandleTypeDef hcomp5;
 
 UART_HandleTypeDef huart1;
 
@@ -66,24 +67,11 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_USART1_UART_Init(void);
-static void MX_TIM1_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_ADC2_Init(void);
-/* USER CODE BEGIN PFP */
-// Zero out an array
-void zero_array(uint32_t *, uint8_t);
-// Copy data of one array to another one of same size
-void copy_array(uint32_t *, uint32_t *, uint8_t);
-// Delay amount of microseconds passed into function
-void delay_us (uint32_t);
-/* USER CODE END PFP */
-
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-
-/* USER CODE END 0 */
+static void MX_COMP5_Init(void);
 
 /**
   * @brief  The application entry point.
@@ -114,6 +102,7 @@ struct voice voices[3];
 uint16_t *lut = sin_lut;
 // Current number of notes on
 uint8_t notes_on = 0;
+uint8_t i = 0;
 
 
 int main(void)
@@ -131,13 +120,17 @@ int main(void)
   MX_DAC1_Init();
   //MX_DAC2_Init();
   MX_ADC2_Init();
-  MX_TIM1_Init();
   MX_TIM6_Init();
   MX_TIM7_Init();
   MX_TIM8_Init();
+  MX_COMP5_Init();
 
   // Enable DAC
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
+  HAL_DAC_Start(&hdac1, DAC_CHANNEL_2);
+
+  // Start comparator
+  HAL_COMP_Start(&hcomp5);
 
   // Enable timers
   HAL_TIM_Base_Start(&htim1);
@@ -146,18 +139,18 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim8);
 
   voices[0].status = 1;
-  voices[1].status = 0;
+  voices[1].status = 1;
   voices[2].status = 0;
 
   voices[0].index = 0;
   voices[1].index = 0;
   voices[2].index = 0;
 
-  notes_on = 1;
+  notes_on = 2;
 
   TIM6->ARR = ARR_VAL(C4);
   TIM7->ARR = ARR_VAL(E4);
-  TIM8->ARR = ARR_VAL(G4);
+  TIM8->ARR = ARR_VAL(1000);
 
   lut = sin_lut;
 
@@ -175,30 +168,6 @@ int main(void)
   }
 }
 
-void zero_array(uint32_t *arr, uint8_t pts) {
-	memset(arr, 0, pts);
-}
-
-void copy_array(uint32_t *dst, uint32_t *src, uint8_t pts)
-{
-	uint8_t i;
-		for (i = 0; i < pts; i++) {
-			dst[i] = src[i];
-		}
-}
-
-void delay_us (uint32_t us)
-{
-	// Set counter to 0
-	__HAL_TIM_SET_COUNTER(&htim1, 0);
-	while (__HAL_TIM_GET_COUNTER(&htim1) < us);
-}
-
-/**
-  * @brief System Clock Configuration
-  * @retval None
-  */
-
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 
@@ -211,8 +180,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		if (voices[1].index == NUM_PTS) voices[1].index = 0;
 	}
 	else if (htim == &htim8) {
-		PUT_TO_DAC(VOICE2);
-		if (voices[2].index == NUM_PTS) voices[2].index = 0;
+		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, tri_lut[i++]);
+		if (i == NUM_PTS) i = 0;
 	}
 	/*
 	if (htim == &htim6) {
@@ -397,52 +366,6 @@ static void MX_DAC1_Init(void)
 
 }
 
-/**
-  * @brief TIM1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM1_Init(void)
-{
-
-  /* USER CODE BEGIN TIM1_Init 0 */
-
-  /* USER CODE END TIM1_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM1_Init 1 */
-
-  /* USER CODE END TIM1_Init 1 */
-  htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 169;
-  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 65535;
-  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 0;
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM1_Init 2 */
-
-  /* USER CODE END TIM1_Init 2 */
-
-}
 
 /**
   * @brief TIM6 Initialization Function
@@ -640,6 +563,34 @@ static void MX_GPIO_Init(void)
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
 }
+
+static void MX_COMP5_Init(void)
+{
+
+  /* USER CODE BEGIN COMP5_Init 0 */
+
+  /* USER CODE END COMP5_Init 0 */
+
+  /* USER CODE BEGIN COMP5_Init 1 */
+
+  /* USER CODE END COMP5_Init 1 */
+  hcomp5.Instance = COMP5;
+  hcomp5.Init.InputPlus = COMP_INPUT_PLUS_IO1;
+  hcomp5.Init.InputMinus = COMP_INPUT_MINUS_DAC1_CH2;
+  hcomp5.Init.OutputPol = COMP_OUTPUTPOL_NONINVERTED;
+  hcomp5.Init.Hysteresis = COMP_HYSTERESIS_NONE;
+  hcomp5.Init.BlankingSrce = COMP_BLANKINGSRC_NONE;
+  hcomp5.Init.TriggerMode = COMP_TRIGGERMODE_NONE;
+  if (HAL_COMP_Init(&hcomp5) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN COMP5_Init 2 */
+
+  /* USER CODE END COMP5_Init 2 */
+
+}
+
 
 /* USER CODE BEGIN 4 */
 
