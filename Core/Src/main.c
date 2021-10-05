@@ -33,11 +33,9 @@
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc2;
 
-COMP_HandleTypeDef hcomp5;
-
 DAC_HandleTypeDef hdac1;
 DAC_HandleTypeDef hdac4;
-DMA_HandleTypeDef hdma_dac4_ch1;
+DMA_HandleTypeDef hdma_adc2;
 
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim6;
@@ -70,15 +68,12 @@ uint16_t sqr_lut[NUM_PTS] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_DMA_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_ADC2_Init(void);
-static void MX_COMP5_Init(void);
-static void MX_DAC4_Init(void);
 static void MX_TIM2_Init(void);
 
 
@@ -112,6 +107,7 @@ uint16_t *lut = sin_lut;
 // Current number of notes on
 uint8_t notes_on = 0;
 uint8_t i = 0;
+uint16_t AD_RES = 0;
 
 
 int main(void)
@@ -122,25 +118,25 @@ int main(void)
   /* Configure the system clock */
   SystemClock_Config();
 
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-    MX_DMA_Init();
+  	/* Initialize all configured peripherals */
+  	MX_GPIO_Init();
     MX_DAC1_Init();
     MX_USART1_UART_Init();
     MX_TIM6_Init();
     MX_TIM7_Init();
     MX_TIM8_Init();
     MX_ADC2_Init();
-    //MX_COMP5_Init();
-    MX_DAC4_Init();
     MX_TIM2_Init();
+
+
+  // Calibrate ADC
+  //HAL_ADCEx_Calibration_Start(&hadc2);
 
   // Enable DAC
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
-  HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_1, (uint32_t*)tri_lut, NUM_PTS, DAC_ALIGN_12B_R);
 
-  // Start comparator
-  //HAL_COMP_Start(&hcomp5);
+  // Start conversions
+  HAL_ADC_Start(&hadc2);
 
   // Enable timers
   HAL_TIM_Base_Start_IT(&htim2);
@@ -150,13 +146,13 @@ int main(void)
 
   voices[0].status = 1;
   voices[1].status = 0;
-  voices[2].status = 0;
+  voices[2].status = 1;
 
   voices[0].index = 0;
   voices[1].index = 0;
   voices[2].index = 0;
 
-  notes_on = 1;
+  notes_on = 2;
 
   TIM6->ARR = ARR_VAL(C4);
   TIM7->ARR = ARR_VAL(E4);
@@ -167,6 +163,8 @@ int main(void)
   // Main loop - read MIDI and play notes on DAC
   // DAC data handled in UART interrupt callback
   while (1) {
+
+	  AD_RES = HAL_ADC_GetValue(&hadc2);
 	  //TODO put in function
 	  HAL_UART_Receive_IT(&huart1, midi_tmp, 3);
 	  if (GLOBAL_MIDI_NOTE_ON) {
@@ -175,9 +173,31 @@ int main(void)
 	  else if (GLOBAL_MIDI_NOTE_OFF) {
 		  MIDI_IN_LED_OFF;
 	  }
+
+	  if (AD_RES >= 0 && AD_RES < 1024) {
+	  		lut = sin_lut;
+	  }
+	  else if (AD_RES >= 1024 && AD_RES < 2048) {
+	  		lut = tri_lut;
+	  }
+	  else if (AD_RES >= 2048 && AD_RES < 3072) {
+	  		lut = saw_lut;
+	  }
+	  else if (AD_RES >= 3072 && AD_RES < 4096) {
+	  		lut = sqr_lut;
+	  }
+
+
   }
 }
 
+// Switch lookup table based on ADC result
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+	AD_RES = HAL_ADC_GetValue(&hadc2);
+}
+
+// When timer triggers, put corresponding signal on DAC
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 /*
@@ -212,6 +232,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 }
 
+// When UART message recieved, only valid if starts with 0x80 or 0x90
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	TIM6->ARR = ARR_VAL(NOTE);
@@ -292,14 +313,14 @@ static void MX_ADC2_Init(void)
   hadc2.Init.Resolution = ADC_RESOLUTION_12B;
   hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc2.Init.GainCompensation = 0;
-  hadc2.Init.ScanConvMode = ADC_SCAN_ENABLE;
-  hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc2.Init.ScanConvMode = ADC_SCAN_DISABLE;
+  hadc2.Init.EOCSelection = ADC_EOC_SEQ_CONV;
   hadc2.Init.LowPowerAutoWait = DISABLE;
-  hadc2.Init.ContinuousConvMode = ENABLE;
-  hadc2.Init.NbrOfConversion = 2;
+  hadc2.Init.ContinuousConvMode = DISABLE;
+  hadc2.Init.NbrOfConversion = 1;
   hadc2.Init.DiscontinuousConvMode = DISABLE;
-  hadc2.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc2.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T2_TRGO;
+  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
   hadc2.Init.DMAContinuousRequests = DISABLE;
   hadc2.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc2.Init.OversamplingMode = DISABLE;
@@ -315,13 +336,6 @@ static void MX_ADC2_Init(void)
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
-  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /** Configure Regular Channel
-  */
-  sConfig.Rank = ADC_REGULAR_RANK_2;
   if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -384,45 +398,7 @@ static void MX_DAC1_Init(void)
   * @param None
   * @retval None
   */
-static void MX_DAC4_Init(void)
-{
 
-  /* USER CODE BEGIN DAC4_Init 0 */
-
-  /* USER CODE END DAC4_Init 0 */
-
-  DAC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN DAC4_Init 1 */
-
-  /* USER CODE END DAC4_Init 1 */
-  /** DAC Initialization
-  */
-  hdac4.Instance = DAC4;
-  if (HAL_DAC_Init(&hdac4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /** DAC channel OUT1 config
-  */
-  sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;
-  sConfig.DAC_DMADoubleDataMode = DISABLE;
-  sConfig.DAC_SignedFormat = DISABLE;
-  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
-  sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
-  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_DISABLE;
-  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_INTERNAL;
-  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
-  if (HAL_DAC_ConfigChannel(&hdac4, &sConfig, DAC_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN DAC4_Init 2 */
-
-  /* USER CODE END DAC4_Init 2 */
-
-}
 
 static void MX_TIM2_Init(void)
 {
@@ -440,7 +416,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = ARR_VAL(1000);
+  htim2.Init.Period = ARR_VAL(1);
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -635,22 +611,6 @@ static void MX_USART1_UART_Init(void)
 
 }
 
-/**
-  * Enable DMA controller clock
-  */
-static void MX_DMA_Init(void)
-{
-
-  /* DMA controller clock enable */
-  __HAL_RCC_DMAMUX1_CLK_ENABLE();
-  __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Channel4_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
-
-}
 
 /**
   * @brief GPIO Initialization Function
@@ -675,33 +635,6 @@ static void MX_GPIO_Init(void)
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-}
-
-static void MX_COMP5_Init(void)
-{
-
-  /* USER CODE BEGIN COMP5_Init 0 */
-
-  /* USER CODE END COMP5_Init 0 */
-
-  /* USER CODE BEGIN COMP5_Init 1 */
-
-  /* USER CODE END COMP5_Init 1 */
-  hcomp5.Instance = COMP5;
-  hcomp5.Init.InputPlus = COMP_INPUT_PLUS_IO1;
-  hcomp5.Init.InputMinus = COMP_INPUT_MINUS_DAC4_CH1;
-  hcomp5.Init.OutputPol = COMP_OUTPUTPOL_NONINVERTED;
-  hcomp5.Init.Hysteresis = COMP_HYSTERESIS_NONE;
-  hcomp5.Init.BlankingSrce = COMP_BLANKINGSRC_NONE;
-  hcomp5.Init.TriggerMode = COMP_TRIGGERMODE_NONE;
-  if (HAL_COMP_Init(&hcomp5) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN COMP5_Init 2 */
-
-  /* USER CODE END COMP5_Init 2 */
 
 }
 
