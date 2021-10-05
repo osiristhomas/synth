@@ -32,8 +32,10 @@
 
 /* Private variables ---------------------------------------------------------*/
 DAC_HandleTypeDef hdac1;
+DAC_HandleTypeDef hdac2;
+DAC_HandleTypeDef hdac4;
 ADC_HandleTypeDef hadc2;
-TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
 TIM_HandleTypeDef htim8;
@@ -66,12 +68,16 @@ uint16_t sqr_lut[NUM_PTS] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_DAC1_Init(void);
+static void MX_DAC2_Init(void);
+static void MX_DAC4_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM2_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_COMP5_Init(void);
+
 
 /**
   * @brief  The application entry point.
@@ -118,39 +124,43 @@ int main(void)
   MX_USART1_UART_Init();
   //MX_DMA_Init();
   MX_DAC1_Init();
-  //MX_DAC2_Init();
+  MX_DAC2_Init();
+  MX_DAC4_Init();
   MX_ADC2_Init();
+  MX_TIM2_Init();
   MX_TIM6_Init();
   MX_TIM7_Init();
   MX_TIM8_Init();
+  MX_DAC4_Init();
   MX_COMP5_Init();
 
   // Enable DAC
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
-  HAL_DAC_Start(&hdac1, DAC_CHANNEL_2);
+  HAL_DAC_Start(&hdac2, DAC_CHANNEL_1);
+  HAL_DAC_Start(&hdac4, DAC_CHANNEL_1);
 
   // Start comparator
   HAL_COMP_Start(&hcomp5);
 
   // Enable timers
-  HAL_TIM_Base_Start(&htim1);
+  HAL_TIM_Base_Start(&htim2);
   HAL_TIM_Base_Start_IT(&htim6);
   HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Base_Start_IT(&htim8);
 
   voices[0].status = 1;
   voices[1].status = 1;
-  voices[2].status = 0;
+  voices[2].status = 1;
 
   voices[0].index = 0;
   voices[1].index = 0;
   voices[2].index = 0;
 
-  notes_on = 2;
+  notes_on = 3;
 
-  TIM6->ARR = ARR_VAL(C4);
-  TIM7->ARR = ARR_VAL(E4);
-  TIM8->ARR = ARR_VAL(1000);
+  TIM6->ARR = ARR_VAL(100);
+  TIM7->ARR = ARR_VAL(200);
+  TIM8->ARR = ARR_VAL(300);
 
   lut = sin_lut;
 
@@ -180,8 +190,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		if (voices[1].index == NUM_PTS) voices[1].index = 0;
 	}
 	else if (htim == &htim8) {
-		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, tri_lut[i++]);
-		if (i == NUM_PTS) i = 0;
+		PUT_TO_DAC(VOICE2);
+		if (voices[2].index == NUM_PTS) voices[2].index = 0;
 	}
 	/*
 	if (htim == &htim6) {
@@ -366,6 +376,141 @@ static void MX_DAC1_Init(void)
 
 }
 
+static void MX_DAC2_Init(void)
+{
+
+  /* USER CODE BEGIN DAC2_Init 0 */
+
+  /* USER CODE END DAC2_Init 0 */
+
+  DAC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN DAC2_Init 1 */
+
+  /* USER CODE END DAC2_Init 1 */
+  /** DAC Initialization
+  */
+  hdac2.Instance = DAC2;
+  if (HAL_DAC_Init(&hdac2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** DAC channel OUT1 config
+  */
+  sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;
+  sConfig.DAC_DMADoubleDataMode = DISABLE;
+  sConfig.DAC_SignedFormat = DISABLE;
+  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
+  sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
+  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
+  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
+  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
+  if (HAL_DAC_ConfigChannel(&hdac2, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Triangle wave generation on DAC OUT1
+  */
+  if (HAL_DACEx_TriangleWaveGenerate(&hdac2, DAC_CHANNEL_1, DAC_TRIANGLEAMPLITUDE_4095) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DAC2_Init 2 */
+
+  /* USER CODE END DAC2_Init 2 */
+
+}
+
+/**
+  * @brief DAC4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DAC4_Init(void)
+{
+
+  /* USER CODE BEGIN DAC4_Init 0 */
+
+  /* USER CODE END DAC4_Init 0 */
+
+  DAC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN DAC4_Init 1 */
+
+  /* USER CODE END DAC4_Init 1 */
+  /** DAC Initialization
+  */
+  hdac4.Instance = DAC4;
+  if (HAL_DAC_Init(&hdac4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** DAC channel OUT1 config
+  */
+  sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;
+  sConfig.DAC_DMADoubleDataMode = DISABLE;
+  sConfig.DAC_SignedFormat = DISABLE;
+  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
+  sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
+  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_DISABLE;
+  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_INTERNAL;
+  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
+  if (HAL_DAC_ConfigChannel(&hdac4, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Triangle wave generation on DAC OUT1
+  */
+  if (HAL_DACEx_TriangleWaveGenerate(&hdac4, DAC_CHANNEL_1, DAC_TRIANGLEAMPLITUDE_4095) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DAC4_Init 2 */
+
+  /* USER CODE END DAC4_Init 2 */
+
+}
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 0;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 4.294967295E9;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+
+}
 
 /**
   * @brief TIM6 Initialization Function
