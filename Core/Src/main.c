@@ -143,24 +143,25 @@ int main(void)
   HAL_COMP_Start(&hcomp5);
 
   // Enable timers
-  HAL_TIM_Base_Start(&htim2);
+  HAL_TIM_Base_Start_IT(&htim2);
   HAL_TIM_Base_Start_IT(&htim6);
   HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Base_Start_IT(&htim8);
 
   voices[0].status = 1;
-  voices[1].status = 1;
-  voices[2].status = 1;
+  voices[1].status = 0;
+  voices[2].status = 0;
 
   voices[0].index = 0;
   voices[1].index = 0;
   voices[2].index = 0;
 
-  notes_on = 3;
+  notes_on = 1;
 
-  TIM6->ARR = ARR_VAL(100);
-  TIM7->ARR = ARR_VAL(200);
-  TIM8->ARR = ARR_VAL(300);
+  TIM2->ARR = ARR_VAL(5000);
+  TIM6->ARR = ARR_VAL(C4);
+  TIM7->ARR = ARR_VAL(E4);
+  TIM8->ARR = ARR_VAL(G4);
 
   lut = sin_lut;
 
@@ -180,7 +181,7 @@ int main(void)
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-
+/*
 	if (htim == &htim6) {
 		PUT_TO_DAC(VOICE0);
 		if (voices[0].index == NUM_PTS) voices[0].index = 0;
@@ -193,7 +194,8 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		PUT_TO_DAC(VOICE2);
 		if (voices[2].index == NUM_PTS) voices[2].index = 0;
 	}
-	/*
+	*/
+
 	if (htim == &htim6) {
 		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (1./notes_on) * (voices[0].status*lut[voices[0].index++] + voices[1].status*lut[voices[1].index] + voices[2].status*lut[voices[2].index]));
 		if (voices[0].index == NUM_PTS) voices[0].index = 0;
@@ -206,7 +208,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (1./notes_on) * (voices[0].status*lut[voices[0].index] + voices[1].status*lut[voices[1].index] + voices[2].status*lut[voices[2].index++]));
 		if (voices[2].index == NUM_PTS) voices[2].index = 0;
 	}
-*/
+
 
 
 }
@@ -452,7 +454,7 @@ static void MX_DAC4_Init(void)
   sConfig.DAC_DMADoubleDataMode = DISABLE;
   sConfig.DAC_SignedFormat = DISABLE;
   sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
   sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
   sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_DISABLE;
   sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_INTERNAL;
@@ -721,7 +723,7 @@ static void MX_COMP5_Init(void)
   /* USER CODE END COMP5_Init 1 */
   hcomp5.Instance = COMP5;
   hcomp5.Init.InputPlus = COMP_INPUT_PLUS_IO1;
-  hcomp5.Init.InputMinus = COMP_INPUT_MINUS_DAC1_CH2;
+  hcomp5.Init.InputMinus = COMP_INPUT_MINUS_DAC4_CH1;
   hcomp5.Init.OutputPol = COMP_OUTPUTPOL_NONINVERTED;
   hcomp5.Init.Hysteresis = COMP_HYSTERESIS_NONE;
   hcomp5.Init.BlankingSrce = COMP_BLANKINGSRC_NONE;
