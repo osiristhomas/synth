@@ -31,15 +31,18 @@
 
 
 /* Private variables ---------------------------------------------------------*/
-DAC_HandleTypeDef hdac1;
-DAC_HandleTypeDef hdac2;
-DAC_HandleTypeDef hdac4;
 ADC_HandleTypeDef hadc2;
+
+COMP_HandleTypeDef hcomp5;
+
+DAC_HandleTypeDef hdac1;
+DAC_HandleTypeDef hdac4;
+DMA_HandleTypeDef hdma_dac4_ch1;
+
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim6;
 TIM_HandleTypeDef htim7;
 TIM_HandleTypeDef htim8;
-COMP_HandleTypeDef hcomp5;
 
 UART_HandleTypeDef huart1;
 
@@ -67,16 +70,16 @@ uint16_t sqr_lut[NUM_PTS] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+static void MX_DMA_Init(void);
 static void MX_DAC1_Init(void);
-static void MX_DAC2_Init(void);
-static void MX_DAC4_Init(void);
 static void MX_USART1_UART_Init(void);
-static void MX_TIM2_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_COMP5_Init(void);
+static void MX_DAC4_Init(void);
+static void MX_TIM2_Init(void);
 
 
 /**
@@ -121,26 +124,23 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_USART1_UART_Init();
-  //MX_DMA_Init();
-  MX_DAC1_Init();
-  MX_DAC2_Init();
-  MX_DAC4_Init();
-  MX_ADC2_Init();
-  MX_TIM2_Init();
-  MX_TIM6_Init();
-  MX_TIM7_Init();
-  MX_TIM8_Init();
-  MX_DAC4_Init();
-  MX_COMP5_Init();
+    MX_DMA_Init();
+    MX_DAC1_Init();
+    MX_USART1_UART_Init();
+    MX_TIM6_Init();
+    MX_TIM7_Init();
+    MX_TIM8_Init();
+    MX_ADC2_Init();
+    //MX_COMP5_Init();
+    MX_DAC4_Init();
+    MX_TIM2_Init();
 
   // Enable DAC
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
-  HAL_DAC_Start(&hdac2, DAC_CHANNEL_1);
-  HAL_DAC_Start(&hdac4, DAC_CHANNEL_1);
+  HAL_DAC_Start_DMA(&hdac4, DAC_CHANNEL_1, (uint32_t*)tri_lut, NUM_PTS, DAC_ALIGN_12B_R);
 
   // Start comparator
-  HAL_COMP_Start(&hcomp5);
+  //HAL_COMP_Start(&hcomp5);
 
   // Enable timers
   HAL_TIM_Base_Start_IT(&htim2);
@@ -158,7 +158,6 @@ int main(void)
 
   notes_on = 1;
 
-  TIM2->ARR = ARR_VAL(5000);
   TIM6->ARR = ARR_VAL(C4);
   TIM7->ARR = ARR_VAL(E4);
   TIM8->ARR = ARR_VAL(G4);
@@ -378,51 +377,7 @@ static void MX_DAC1_Init(void)
 
 }
 
-static void MX_DAC2_Init(void)
-{
 
-  /* USER CODE BEGIN DAC2_Init 0 */
-
-  /* USER CODE END DAC2_Init 0 */
-
-  DAC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN DAC2_Init 1 */
-
-  /* USER CODE END DAC2_Init 1 */
-  /** DAC Initialization
-  */
-  hdac2.Instance = DAC2;
-  if (HAL_DAC_Init(&hdac2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /** DAC channel OUT1 config
-  */
-  sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;
-  sConfig.DAC_DMADoubleDataMode = DISABLE;
-  sConfig.DAC_SignedFormat = DISABLE;
-  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
-  sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
-  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
-  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
-  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
-  if (HAL_DAC_ConfigChannel(&hdac2, &sConfig, DAC_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /** Configure Triangle wave generation on DAC OUT1
-  */
-  if (HAL_DACEx_TriangleWaveGenerate(&hdac2, DAC_CHANNEL_1, DAC_TRIANGLEAMPLITUDE_4095) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN DAC2_Init 2 */
-
-  /* USER CODE END DAC2_Init 2 */
-
-}
 
 /**
   * @brief DAC4 Initialization Function
@@ -463,17 +418,12 @@ static void MX_DAC4_Init(void)
   {
     Error_Handler();
   }
-  /** Configure Triangle wave generation on DAC OUT1
-  */
-  if (HAL_DACEx_TriangleWaveGenerate(&hdac4, DAC_CHANNEL_1, DAC_TRIANGLEAMPLITUDE_4095) != HAL_OK)
-  {
-    Error_Handler();
-  }
   /* USER CODE BEGIN DAC4_Init 2 */
 
   /* USER CODE END DAC4_Init 2 */
 
 }
+
 static void MX_TIM2_Init(void)
 {
 
@@ -490,7 +440,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4.294967295E9;
+  htim2.Init.Period = ARR_VAL(1000);
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -682,6 +632,23 @@ static void MX_USART1_UART_Init(void)
   /* USER CODE BEGIN USART1_Init 2 */
 
   /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMAMUX1_CLK_ENABLE();
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
 
 }
 
