@@ -23,6 +23,8 @@
 
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+
+
 #include "main.h"
 #include "macros.h"
 #include "notes.h"
@@ -45,25 +47,33 @@ TIM_HandleTypeDef htim8;
 UART_HandleTypeDef huart1;
 
 
-// Global midi note variable
+// Global midi note variables
 unsigned char midi_msg[3];
 unsigned char midi_tmp[3];
 
-// Sine LUT
-uint16_t sin_lut[NUM_PTS] = {2048,2148,2248,2348,2447,2545,2642,2737,2831,2923,3013,3100,3185,3267,3346,3423,3495,3565,3630,3692,3750,3804,3853,3898,3939,3975,4007,4034,4056,4073,4085,4093,4095,4093,4085,4073,4056,4034,4007,3975,3939,3898,3853,3804,3750,3692,3630,3565,3495,3423,3346,3267,3185,3100,3013,2923,2831,2737,2642,2545,2447,2348,2248,2148,2048,1947,1847,1747,1648,1550,1453,1358,1264,1172,1082,995,910,828,749,672,600,530,465,403,345,291,242,197,156,120,88,61,39,22,10,2,0,2,10,22,39,61,88,120,156,197,242,291,345,403,465,530,600,672,749,828,910,995,1082,1172,1264,1358,1453,1550,1648,1747,1847,1947};
+// Voices
+struct voice voices[3];
 
-// Triangle LUT
-uint16_t tri_lut[NUM_PTS] = {64,128,192,256,320,384,448,512,576,640,704,768,832,896,960,1024,1088,1152,1216,1280,1344,1408,1472,1536,1600,1664,1728,1792,1856,1920,1984,2048,2111,2175,2239,2303,2367,2431,2495,2559,2623,2687,2751,2815,2879,2943,3007,3071,3135,3199,3263,3327,3391,3455,3519,3583,3647,3711,3775,3839,3903,3967,4031,4095,4031,3967,3903,3839,3775,3711,3647,3583,3519,3455,3391,3327,3263,3199,3135,3071,3007,2943,2879,2815,2751,2687,2623,2559,2495,2431,2367,2303,2239,2175,2111,2048,1984,1920,1856,1792,1728,1664,1600,1536,1472,1408,1344,1280,1216,1152,1088,1024,960,896,832,768,704,640,576,512,448,384,320,256,192,128,64,0};
 
-// Sawtooth LUT
-uint16_t saw_lut[NUM_PTS] = {0,32,64,96,128,160,192,224,256,288,320,352,384,416,448,480,512,544,576,608,640,672,704,736,768,800,832,864,896,928,960,992,1024,1056,1088,1120,1152,1184,1216,1248,1280,1312,1344,1376,1408,1440,1472,1504,1536,1568,1600,1632,1664,1696,1728,1760,1792,1824,1856,1888,1920,1952,1984,2016,2048,2080,2112,2144,2176,2208,2240,2272,2304,2336,2368,2400,2432,2464,2496,2528,2560,2592,2624,2656,2688,2720,2752,2784,2816,2848,2880,2912,2944,2976,3008,3040,3072,3104,3136,3168,3200,3232,3264,3296,3328,3360,3392,3424,3456,3488,3520,3552,3584,3616,3648,3680,3712,3744,3776,3808,3840,3872,3904,3936,3968,4000,4032,4064};
+// Current number of notes on
+uint8_t notes_on = 0;
+uint16_t AD_RES = 0;
+uint8_t multiplier = 1;
 
-// Exponential LUT
-uint16_t exp_lut[NUM_PTS] = {0,126,248,366,481,592,700,805,906,1004,1099,1191,1281,1367,1451,1532,1611,1688,1762,1834,1903,1971,2036,2099,2161,2220,2278,2334,2388,2440,2491,2541,2589,2635,2680,2723,2766,2806,2846,2885,2922,2958,2993,3027,3060,3091,3122,3152,3181,3209,3237,3263,3289,3313,3338,3361,3383,3405,3427,3447,3467,3486,3505,3523,3541,3558,3574,3590,3606,3621,3636,3650,3663,3677,3690,3702,3714,3726,3737,3748,3759,3769,3779,3789,3798,3807,3816,3825,3833,3841,3849,3857,3864,3871,3878,3885,3891,3897,3903,3909,3915,3921,3926,3931,3936,3941,3946,3950,3955,3959,3963,3967,3971,3975,3979,3982,3986,3989,3992,3996,3999,4002,4005,4007,4010,4013,4015,4018};
+// Sine LUT - generated with https://www.daycounter.com/Calculators/Sine-Generator-Calculator.phtml
+uint16_t sin_lut[NUM_PTS] = {512,537,562,587,612,636,661,684,708,731,753,775,796,817,837,856,874,891,908,923,938,951,964,975,985,994,1002,1009,1014,1018,1022,1023,1024,1023,1022,1018,1014,1009,1002,994,985,975,964,951,938,923,908,891,874,856,837,817,796,775,753,731,708,684,661,636,612,587,562,537,512,487,462,437,412,388,363,340,316,293,271,249,228,207,187,168,150,133,116,101,86,73,60,49,39,30,22,15,10,6,2,1,0,1,2,6,10,15,22,30,39,49,60,73,86,101,116,133,150,168,187,207,228,249,271,293,316,340,363,388,412,437,462,487};
+
+// Triangle LUT - generated with https://www.daycounter.com/Calculators/Triangle-Wave-Generator-Calculator2.phtml
+uint16_t tri_lut[NUM_PTS] = {21,43,64,85,107,128,149,171,192,213,235,256,277,299,320,341,363,384,405,427,448,469,491,512,533,555,576,597,619,640,661,683,704,725,746,768,789,810,832,853,874,896,917,938,960,981,1002,1024,1045,1066,1088,1109,1130,1152,1173,1194,1216,1237,1258,1280,1301,1322,1344,1365,1344,1322,1301,1280,1258,1237,1216,1194,1173,1152,1130,1109,1088,1066,1045,1024,1002,981,960,938,917,896,874,853,832,810,789,768,746,725,704,683,661,640,619,597,576,555,533,512,491,469,448,427,405,384,363,341,320,299,277,256,235,213,192,171,149,128,107,85,64,43,21,0};
 
 // Square LUT
-uint16_t sqr_lut[NUM_PTS] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095,4095};
+uint16_t sqr_lut[NUM_PTS] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365,1365};
 
+// Sawtooth LUT - generated with MATLAB
+uint16_t saw_lut[NUM_PTS] = {0,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,330,340,350,360,370,380,390,400,410,420,430,440,450,460,470,480,490,500,510,520,530,540,550,560,570,580,590,600,610,620,630,640,650,660,670,680,690,700,710,720,730,740,750,760,770,780,790,800,810,820,830,840,850,860,870,880,890,900,910,920,930,940,950,960,970,980,990,1000,1010,1020,1030,1040,1050,1060,1070,1080,1090,1100,1110,1120,1130,1140,1150,1160,1170,1180,1190,1200,1210,1220,1230,1240,1250,1260,1270};
+
+// Look up table used in wavetable synthesis
+uint16_t *lut = sin_lut;
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
@@ -75,39 +85,6 @@ static void MX_TIM7_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_TIM2_Init(void);
-
-
-/**
-  * @brief  The application entry point.
-  * @retval int
-  */
-enum {
-	ATTACK = 0,
-	DECAY,
-	SUSTAIN,
-	RELEASE
-};
-
-struct voice {
-	uint8_t status;
-	uint8_t adsr_state;
-	uint16_t att_val;
-	uint16_t dec_val;
-	uint16_t sus_val;
-	uint16_t rel_val;
-	uint16_t note;
-	uint8_t index;
-};
-
-/* Global variables */
-// Voices
-struct voice voices[3];
-// Look up table used in wavetable synthesis
-uint16_t *lut = sin_lut;
-// Current number of notes on
-uint8_t notes_on = 0;
-uint8_t i = 0;
-uint16_t AD_RES = 0;
 
 
 int main(void)
@@ -128,7 +105,6 @@ int main(void)
     MX_ADC2_Init();
     MX_TIM2_Init();
 
-
   // Calibrate ADC
   //HAL_ADCEx_Calibration_Start(&hadc2);
 
@@ -144,16 +120,15 @@ int main(void)
   HAL_TIM_Base_Start_IT(&htim7);
   HAL_TIM_Base_Start_IT(&htim8);
 
-  voices[0].status = 1;
+  voices[0].status = 0;
   voices[1].status = 0;
-  voices[2].status = 1;
-
+  voices[2].status = 0;
   voices[0].index = 0;
   voices[1].index = 0;
   voices[2].index = 0;
 
-  notes_on = 2;
-
+  notes_on = 0;
+  // __HAL_TIM_SET_AUTORELOAD
   TIM6->ARR = ARR_VAL(C4);
   TIM7->ARR = ARR_VAL(E4);
   TIM8->ARR = ARR_VAL(G4);
@@ -165,6 +140,7 @@ int main(void)
   while (1) {
 
 	  AD_RES = HAL_ADC_GetValue(&hadc2);
+
 	  //TODO put in function
 	  HAL_UART_Receive_IT(&huart1, midi_tmp, 3);
 	  if (GLOBAL_MIDI_NOTE_ON) {
@@ -173,6 +149,7 @@ int main(void)
 	  else if (GLOBAL_MIDI_NOTE_OFF) {
 		  MIDI_IN_LED_OFF;
 	  }
+
 
 	  if (AD_RES >= 0 && AD_RES < 1024) {
 	  		lut = sin_lut;
@@ -191,6 +168,7 @@ int main(void)
   }
 }
 
+// TODO doesnt get called
 // Switch lookup table based on ADC result
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 {
@@ -200,34 +178,34 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 // When timer triggers, put corresponding signal on DAC
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-/*
+
 	if (htim == &htim6) {
 		PUT_TO_DAC(VOICE0);
-		if (voices[0].index == NUM_PTS) voices[0].index = 0;
+		RESET_INDEX(0);
 	}
 	else if (htim == &htim7) {
 		PUT_TO_DAC(VOICE1);
-		if (voices[1].index == NUM_PTS) voices[1].index = 0;
+		RESET_INDEX(1);
 	}
 	else if (htim == &htim8) {
 		PUT_TO_DAC(VOICE2);
-		if (voices[2].index == NUM_PTS) voices[2].index = 0;
+		RESET_INDEX(2);
 	}
-	*/
 
+/*
 	if (htim == &htim6) {
-		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (1./notes_on) * (voices[0].status*lut[voices[0].index++] + voices[1].status*lut[voices[1].index] + voices[2].status*lut[voices[2].index]));
+		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (MAX_NOTES - notes_on) * (voices[0].status*lut[voices[0].index++] + voices[1].status*lut[voices[1].index] + voices[2].status*lut[voices[2].index]));
 		if (voices[0].index == NUM_PTS) voices[0].index = 0;
 	}
 	else if (htim == &htim7) {
-		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (1./notes_on) * (voices[0].status*lut[voices[0].index] + voices[1].status*lut[voices[1].index++] + voices[2].status*lut[voices[2].index]));
+		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (MAX_NOTES - notes_on) * (voices[0].status*lut[voices[0].index] + voices[1].status*lut[voices[1].index++] + voices[2].status*lut[voices[2].index]));
 		if (voices[1].index == NUM_PTS) voices[1].index = 0;
 	}
 	else if (htim == &htim8) {
-		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (1./notes_on) * (voices[0].status*lut[voices[0].index] + voices[1].status*lut[voices[1].index] + voices[2].status*lut[voices[2].index++]));
+		HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, (MAX_NOTES - notes_on) * (voices[0].status*lut[voices[0].index] + voices[1].status*lut[voices[1].index] + voices[2].status*lut[voices[2].index++]));
 		if (voices[2].index == NUM_PTS) voices[2].index = 0;
 	}
-
+*/
 
 
 }
@@ -235,13 +213,44 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 // When UART message recieved, only valid if starts with 0x80 or 0x90
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
-	TIM6->ARR = ARR_VAL(NOTE);
-	if (midi_tmp[0] == 0x90 || midi_tmp[0] == 0x80) {
+
+	if (midi_tmp[0] == 0x90) {
 		uint8_t i;
 		for (i = 0; i < 3; i++) {
 			midi_msg[i] = midi_tmp[i];
 		}
+
+		voices[notes_on].status = ON;
+		notes_on++;
+
+
 	}
+
+	else if (midi_tmp[0] == 0x80) {
+		uint8_t i;
+		for (i = 0; i < 3; i++) {
+			midi_msg[i] = midi_tmp[i];
+		}
+
+		notes_on--;
+		voices[notes_on].status = OFF;
+
+	}
+
+	switch (notes_on) {
+			case 1:
+				TIM6->ARR = ARR_VAL(NOTE);
+				multiplier = 3;
+				break;
+			case 2:
+				TIM7->ARR = ARR_VAL(NOTE);
+				multiplier = 2;
+				break;
+			case 3:
+				TIM8->ARR = ARR_VAL(NOTE);
+				multiplier = 1;
+				break;
+			}
 }
 
 

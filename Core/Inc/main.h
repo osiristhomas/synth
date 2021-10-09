@@ -37,7 +37,23 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
+enum {
+	ATTACK = 0,
+	DECAY,
+	SUSTAIN,
+	RELEASE
+};
 
+struct voice {
+	uint8_t status;
+	uint8_t adsr_state;
+	uint16_t att_val;
+	uint16_t dec_val;
+	uint16_t sus_val;
+	uint16_t rel_val;
+	uint16_t note;
+	uint8_t index;
+};
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
