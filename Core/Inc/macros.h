@@ -15,7 +15,7 @@
 #define GLOBAL_MIDI_NOTE_OFF midi_msg[0] == 0x80
 #define ARR_VAL(f) (((F_CPU)/(NUM_PTS*f))-1)
 #define PUT_TO_DAC(v) HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, v)
-#define VOICE0 (multiplier * (voices[0].status*lut[voices[0].index++] + voices[1].status*lut[voices[1].index]   + voices[2].status*lut[voices[2].index]))
-#define VOICE1 (multiplier * (voices[0].status*lut[voices[0].index]   + voices[1].status*lut[voices[1].index++] + voices[2].status*lut[voices[2].index]))
-#define VOICE2 (multiplier * (voices[0].status*lut[voices[0].index]   + voices[1].status*lut[voices[1].index]   + voices[2].status*lut[voices[2].index++]))
+#define VOICE0 (uint16_t)(multiplier * (voices[0].status*lut[voices[0].index++] + voices[1].status*lut[voices[1].index]   + voices[2].status*lut[voices[2].index]))
+#define VOICE1 (uint16_t)(multiplier * (voices[0].status*lut[voices[0].index]   + voices[1].status*lut[voices[1].index++] + voices[2].status*lut[voices[2].index]))
+#define VOICE2 (uint16_t)(multiplier * (voices[0].status*lut[voices[0].index]   + voices[1].status*lut[voices[1].index]   + voices[2].status*lut[voices[2].index++]))
 #define RESET_INDEX(i) if (voices[i].index == NUM_PTS) voices[i].index = 0
